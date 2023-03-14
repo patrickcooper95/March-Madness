@@ -1,4 +1,5 @@
 import csv
+import json
 import logging
 import os
 import sqlite3 as sql
@@ -92,13 +93,41 @@ def standardize_team_names():
     men_teams = cur.fetchall()
     men_teams = [team[0] for team in men_teams]
 
-    if not os.path.isfile(name_exception_path):
-        mismatches = []
+    # Only required for external data - Kaggle data should already be standardized
+    external_source_tables = cur.execute("SELECT table_name FROM _metadata WHERE external_source=1;").fetchall()
+    external_source_tables = [table[0] for table in external_source_tables]
+    LOGGER.info(f"Found external source tables: {external_source_tables}")
 
-        # Only required for external data - Kaggle data should already be standardized
-        external_source_tables = cur.execute("SELECT table_name FROM _metadata WHERE external_source=1;").fetchall()
-        external_source_tables = [table[0] for table in external_source_tables]
-        LOGGER.info(f"Found external source tables: {external_source_tables}")
+    if os.path.isfile("external_sources/team_name_mapping.json"):
+        LOGGER.info("Team name mapping file found - loading JSON file")
+        with open("external_sources/team_name_mapping.json", "r") as json_file:
+            team_name_mapping = json.load(json_file)
+
+    for table in external_source_tables:
+        LOGGER.info(f"Updating team names in table: {table}")
+        # Get some easy wins with Saints and States
+        cur.execute(f"UPDATE '{table}' SET team_name=replace(team_name,'St.', 'St') WHERE team_name like '%St.';")
+        cur.execute(f"UPDATE '{table}' SET team_name=replace(team_name,'St.', 'St') WHERE team_name like 'St.%';")
+        cur.execute(f"UPDATE '{table}' SET team_name=replace(team_name,'Saint', 'St') WHERE team_name like 'Saint%';")
+
+        LOGGER.info("Standard updates made - proceeding to mapped name updates")
+
+        conn.commit()
+
+        # Handle all other cases - mapped in JSON
+        ext_team_names = [team[0] for team in cur.execute(f"SELECT team_name FROM '{table}';").fetchall()]
+        for proper_name, alt_names in team_name_mapping.items():
+            if any([name for name in alt_names if name in ext_team_names]):
+                for name in alt_names:
+                    if name in ext_team_names:
+                        cur.execute(f"UPDATE '{table}' SET team_name='{proper_name}' WHERE team_name='{name}';")
+        LOGGER.info(f"Team names standardized for table: {table}")
+
+        conn.commit()
+
+    if not os.path.isfile(name_exception_path):
+        LOGGER.info("Running team name exceptions check")
+        mismatches = []
         for table in external_source_tables:
             external_team_names = cur.execute(f"SELECT team_name FROM '{table}';").fetchall()
             for team in external_team_names:
@@ -112,9 +141,8 @@ def standardize_team_names():
             for name in mismatches:
                 writer.writerow([name])
 
-    # Women
-    # cur.execute("SELECT TeamName FROM team_women;")
-    # women_teams = cur.fetchall()
+    conn.commit()
+    conn.close()
 
 
 def create_advanced_statistics():
