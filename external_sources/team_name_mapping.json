@@ -2,11 +2,8 @@
 	"Connecticut": [
 		"UConn"
 	],
-	"St Marys CA": [
-		"St Mary''s (CA)",
-		"Saint Mary''s (CA)",
-		"Saint Marys (CA)",
-		"St Marys (CA)"
+	"St Mary''s CA": [
+		"St Mary's (CA)"
 	],
 	"FL Atlantic": [
 		"Fla. Atlantic"
@@ -29,10 +26,8 @@
 	"Southern Miss": [
 		"Southern Miss."
 	],
-	"St Johns": [
-		"St. John''s (NY)",
-		"St. Johns (NY)",
-		"St Johns (NY)"
+	"St John''s": [
+		"St John's (NY)"
 	],
 	"Loy Marymount": [
 		"LMU (CA)"
@@ -103,11 +98,9 @@
 	"Gardner Webb": [
 		"Gardner-Webb"
 	],
-	"St Josephs PA": [
-		"Saint Joseph''s",
-		"St Joseph''s",
-		"Saint Josephs",
-		"St Josephs"
+	"St Joseph''s PA": [
+		"Saint Joseph's",
+		"St Joseph's"
 	],
 	"Northwestern LA": [
 		"Northwestern St"
@@ -196,9 +189,9 @@
 	"Nicholls St": [
 		"Nicholls"
 	],
-	"Mt St Marys": [
-		"Mount St. Mary''s",
-		"Mount St Mary''s",
+	"Mt St Mary''s": [
+		"Mount St. Mary's",
+		"Mount St Mary's",
 		"Mount St Marys",
 		"Mount St. Marys"
 	],
@@ -235,9 +228,9 @@
 	"Charleston So": [
 		"Charleston So."
 	],
-	"St Peters": [
-		"St Peter''s",
-		"St Peters"
+	"St Peter''s": [
+		"St Peter's",
+		"Saint Peters's"
 	],
 	"Missouri KC": [
 		"Kansas City"

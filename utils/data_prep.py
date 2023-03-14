@@ -120,6 +120,9 @@ def standardize_team_names():
             if any([name for name in alt_names if name in ext_team_names]):
                 for name in alt_names:
                     if name in ext_team_names:
+                        # Escape the single quote for the query
+                        if "'" in name:
+                            name = name.replace("'", "''")
                         cur.execute(f"UPDATE '{table}' SET team_name='{proper_name}' WHERE team_name='{name}';")
         LOGGER.info(f"Team names standardized for table: {table}")
 
@@ -132,6 +135,7 @@ def standardize_team_names():
             external_team_names = cur.execute(f"SELECT team_name FROM '{table}';").fetchall()
             for team in external_team_names:
                 if team[0] not in men_teams:
+                    LOGGER.info(f"{team[0]} not in men_teams")
                     mismatches.append(team[0])
 
         LOGGER.info(f"{len(mismatches)} name exceptions found!")
