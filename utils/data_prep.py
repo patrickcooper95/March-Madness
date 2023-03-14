@@ -1,4 +1,6 @@
+import csv
 import logging
+import os
 import sqlite3 as sql
 
 import pandas as pd
@@ -6,13 +8,15 @@ import pandas as pd
 
 LOGGER = logging.getLogger()
 
+name_exception_path = "external_sources/name_exceptions.csv"
 
 def get_db_conn():
     return sql.connect("madness.db")
 
 
-def create_database():
+def create_database(add_external_sources: bool = True):
     """Load data from CSVs to a SQLite Database."""
+
     file_to_table_mapping = {
         "Cities.csv": "city",
         "Conferences.csv": "conference",
@@ -45,6 +49,12 @@ def create_database():
 
     conn = sql.connect("madness.db")
     LOGGER.info("Connected to / created: madness.db")
+
+    # Create database metadata table
+    cur = conn.cursor()
+    cur.execute("DROP TABLE IF EXISTS _metadata;")
+    cur.execute("CREATE TABLE _metadata (table_name TEXT, external_source INTEGER);")
+
     for file, table in file_to_table_mapping.items():
         LOGGER.info(f"Trying {file} -> {table}")
 
@@ -54,7 +64,57 @@ def create_database():
         df.to_sql(table, conn, if_exists="replace", index=False)
         LOGGER.info(f"Created table: {table}")
 
+    if add_external_sources:
+        LOGGER.info("Loading external data sources")
+        for file in os.listdir("external_sources"):
+            if file.endswith(".csv") and "name_exceptions" not in file:
+                LOGGER.info(f"Attempting to load: {file}")
+                df = pd.read_csv(f"external_sources/{file}")
+                table_name = file.split(".")[0]
+                df.to_sql(table_name, conn, if_exists="replace", index=False)
+
+                # Record table in _metadata as external source
+                cur.execute(f"INSERT INTO _metadata VALUES ('{table_name}', 1);")
+                LOGGER.info(f"File: {file} loaded")
+
+    conn.commit()
+    conn.close()
     LOGGER.info("Data loaded")
+
+
+def standardize_team_names():
+    conn = get_db_conn()
+    cur = conn.cursor()
+
+    LOGGER.info("Standardizing team names...")
+    # Men
+    cur.execute("SELECT TeamName FROM team_men;")
+    men_teams = cur.fetchall()
+    men_teams = [team[0] for team in men_teams]
+
+    if not os.path.isfile(name_exception_path):
+        mismatches = []
+
+        # Only required for external data - Kaggle data should already be standardized
+        external_source_tables = cur.execute("SELECT table_name FROM _metadata WHERE external_source=1;").fetchall()
+        external_source_tables = [table[0] for table in external_source_tables]
+        LOGGER.info(f"Found external source tables: {external_source_tables}")
+        for table in external_source_tables:
+            external_team_names = cur.execute(f"SELECT team_name FROM '{table}';").fetchall()
+            for team in external_team_names:
+                if team[0] not in men_teams:
+                    mismatches.append(team[0])
+
+        LOGGER.info(f"{len(mismatches)} name exceptions found!")
+        LOGGER.info(f"Writing name exceptions file to: {name_exception_path}")
+        with open(name_exception_path, "w", newline='') as exceptions_file:
+            writer = csv.writer(exceptions_file)
+            for name in mismatches:
+                writer.writerow([name])
+
+    # Women
+    # cur.execute("SELECT TeamName FROM team_women;")
+    # women_teams = cur.fetchall()
 
 
 def create_advanced_statistics():
@@ -73,7 +133,7 @@ def create_advanced_statistics():
     )
     for table in alter_tables:
 
-        LOGGER.info(f"Creating the following stats: TSA, TSP, FG%, 3PTFG%, FT% for: {table}")
+        LOGGER.info(f"Creating the following stats: TSA, TSP, FG%, 3PTFG%, FT%, TOVP for: {table}")
         # Add TSA Columns
         cur.execute(BASE_ADD_COLUMN.format(table, "WTSA"))
         cur.execute(BASE_ADD_COLUMN.format(table, "LTSA"))
@@ -85,22 +145,25 @@ def create_advanced_statistics():
         cur.execute(BASE_ADD_COLUMN.format(table, "L3PTP"))
         cur.execute(BASE_ADD_COLUMN.format(table, "WFTP"))
         cur.execute(BASE_ADD_COLUMN.format(table, "LFTP"))
+        cur.execute(BASE_ADD_COLUMN.format(table, "WTOVP"))
+        cur.execute(BASE_ADD_COLUMN.format(table, "LTOVP"))
 
         # Insert all but TSP values
-        # TODO: Determine why some columns are not populating
         cur.execute(f"""UPDATE {table}
             SET WTSA=WFGA+WFTA*0.44,
                 LTSA=LFGA+LFTA*0.44,
-                WFGP=WFGM/WFGA,
-                LFGP=LFGM/LFGA,
-                W3PTP=WFGM3/WFGA3,
-                L3PTP=LFGM3/LFGA3,
-                WFTP=WFTM/WFTA,
-                LFTP=LFTM/LFTA
+                WFGP=CAST(WFGM AS REAL)/WFGA,
+                LFGP=CAST(LFGM AS REAL)/LFGA,
+                W3PTP=CAST(WFGM3 AS REAL)/WFGA3,
+                L3PTP=CAST(LFGM3 AS REAL)/LFGA3,
+                WFTP=CAST(WFTM AS REAL)/WFTA,
+                LFTP=CAST(LFTM AS REAL)/LFTA,
+                WTOVP=CAST((100 * WTO) AS REAL)/CAST((WFGA+0.44*WFTA+WTO) AS REAL),
+                LTOVP=CAST((100 * LTO) AS REAL)/CAST((LFGA+0.44*LFTA+LTO) AS REAL)
             ;   
             """
         )
-        LOGGER.info(f"TSA, FG%, 3PTFG%, FT% added to table: {table}")
+        LOGGER.info(f"TSA, FG%, 3PTFG%, FT%, TOV% added to table: {table}")
 
         # Insert TSP Values
         cur.execute(f"UPDATE {table} SET WTSP=WScore/(2*WTSA), LTSP=LScore/(2*LTSA);")
