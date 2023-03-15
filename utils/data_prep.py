@@ -157,12 +157,12 @@ def create_advanced_statistics():
     cur = conn.cursor()
 
     # TSA and TSP / FG% / 3PT % / FT %
-    alter_tables = (
+    alter_tables = {
         "regular_season_detailed_results_men",
         "tourney_detailed_results_men",
         "regular_season_detailed_results_women",
         "tourney_detailed_results_women"
-    )
+    }
     for table in alter_tables:
 
         LOGGER.info(f"Creating the following stats: TSA, TSP, FG%, 3PTFG%, FT%, TOVP for: {table}")
@@ -203,3 +203,20 @@ def create_advanced_statistics():
 
         # Commit after each table is complete
         conn.commit()
+
+    patch_null_values(alter_tables)
+
+
+def patch_null_values(table_set: set):
+    """Update known null values with appropriate placeholders."""
+
+    conn = get_db_conn()
+    cur = conn.cursor()
+
+    # WFTP/LFTP are the only known columns to have NULLs
+    for table in table_set:
+        LOGGER.info(f"Patching null values for table: {table}")
+        cur.execute(f'UPDATE "{table}" SET WFTP=.5 WHERE WFTP IS NULL;')
+        cur.execute(f'UPDATE "{table}" SET LFTP=.5 WHERE LFTP IS NULL;')
+        conn.commit()
+    LOGGER.info(f"NULL fields patched for tables: {table_set}")
