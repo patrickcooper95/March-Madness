@@ -8,9 +8,9 @@ logging.basicConfig(level=logging.INFO,
                     datefmt='%H:%M:%S'
                     )
 
-EXECUTION_NAME = "V2"
+EXECUTION_NAME = "V3"
 add_external_sources = True
-run_data_setup = True
+run_data_setup = False
 aggregate_team_data = True
 transform_and_test = True
 export_content = True

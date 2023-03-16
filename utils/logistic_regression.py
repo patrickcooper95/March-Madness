@@ -12,7 +12,7 @@ from sklearn.metrics import classification_report, confusion_matrix
 LOGGER = logging.getLogger()
 
 
-model = LogisticRegression(solver='liblinear', C=10.0, random_state=0)
+model = LogisticRegression(solver='liblinear', C=5.0, random_state=0)
 
 
 def get_db_conn():
@@ -24,7 +24,7 @@ def classify_data(training: bool = True):
     cur = conn.cursor()
 
     table_name = "TRAINING_SET" if training else "TEST_SET"
-    cur.execute(f"SELECT NOR, NDR, NTSP, NFTP, NTOVP FROM {table_name};")
+    cur.execute(f"SELECT NOR, NDR, NTSP, N3PTP, NFTP, NTOVP FROM {table_name};")
     raw_data = cur.fetchall()
     conn.close()
     LOGGER.info(f"Retrieved {table_name} set (PREVIEW): {raw_data[:10]}")
@@ -100,9 +100,9 @@ def build_predictions(execution_name: str):
 
     for team_a in team_ids:
         for team_b in team_ids:
-            cur.execute(f"SELECT off_reb, def_reb, tsp, ftp, tovp FROM team_stats WHERE team_id='{team_a}';")
+            cur.execute(f"SELECT off_reb, def_reb, tsp, \"3ptp\", ftp, tovp FROM team_stats WHERE team_id='{team_a}';")
             team_a_stats = np.array(cur.fetchone())
-            cur.execute(f"SELECT off_reb, def_reb, tsp, ftp, tovp FROM team_stats WHERE team_id='{team_b}';")
+            cur.execute(f"SELECT off_reb, def_reb, tsp, \"3ptp\", ftp, tovp FROM team_stats WHERE team_id='{team_b}';")
             team_b_stats = np.array(cur.fetchone())
 
             if not team_a_stats.any():
@@ -140,10 +140,10 @@ def export_to_csv(execution_name: str):
 
     file_name = "bracket_predictions_2023.csv"
     LOGGER.info(f"Exporting matchup results to CSV: {file_name}")
-    query = f"select p.team_id_x, p.team_id_y, p.prob_x from predictions_{execution_name};"
+    query = f"select team_id_x, team_id_y, prob_x from predictions_{execution_name};"
     LOGGER.info(f"Running query: {query} to build DataFrame")
 
-    output_base = pd.read_sql(f"select p.team_id_x, p.team_id_y, p.prob_x from predictions_{execution_name};", con=get_db_conn())
+    output_base = pd.read_sql(query, con=get_db_conn())
     output_base["ID"] = "2023_" + output_base["team_id_x"].astype(str) + "_" + output_base["team_id_y"].astype(str)
     output_base["Pred"] = output_base["prob_x"]
     header = ["ID", "Pred"]
