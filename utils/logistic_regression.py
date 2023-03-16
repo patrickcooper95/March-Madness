@@ -19,6 +19,42 @@ def get_db_conn():
     return sql.connect("madness.db")
 
 
+def adjust_for_net_ranking(team_a, team_b, predictions):
+    conn = get_db_conn()
+    cur = conn.cursor()
+    LOGGER.info("Adjusting predictions based on NET rankings...")
+    team_a_name = cur.execute(f"SELECT TeamName FROM team_men WHERE TeamID='{team_a}';").fetchone()[0]
+    team_b_name = cur.execute(f"SELECT TeamName FROM team_men WHERE TeamID='{team_b}';").fetchone()[0]
+
+    # Fix apostrophe issue
+    team_a_name = team_a_name.replace("'s", "''s")
+    team_b_name = team_b_name.replace("'s", "''s")
+
+    # Get NET Ranking
+    net_constant = 363
+    net_ranking_a = cur.execute(f"SELECT net_ranking from \"2023_final_net_rankings\" WHERE team_name='{team_a_name}';").fetchone()[0]
+    net_ranking_b = cur.execute(f"SELECT net_ranking from \"2023_final_net_rankings\" WHERE team_name='{team_b_name}';").fetchone()[0]
+
+    net_ranking = net_ranking_a - net_ranking_b
+    LOGGER.info(f"Net ranking for matchup: {net_ranking}")
+
+    net_ranking_adj = net_ranking / net_constant
+    if net_ranking_adj < 0:
+        if abs(net_ranking_adj) > (1 - predictions[1]):
+            LOGGER.info("Not applying net ranking updates for this matchup.")
+        else:
+            predictions[0] = predictions[0] - net_ranking_adj
+            predictions[1] = predictions[1] + net_ranking_adj
+    elif net_ranking_adj > 0:
+        if abs(net_ranking_adj) > (predictions[1] - 0):
+            LOGGER.info(f"Not applying net ranking updates for this matchup.")
+        else:
+            predictions[0] = predictions[0] - net_ranking_adj
+            predictions[1] = predictions[1] + net_ranking_adj
+    LOGGER.info(f"Predictions adjusted to: {predictions[0]}-{predictions[1]} for matchup: {team_a}-{team_b}")
+    return predictions
+
+
 def classify_data(training: bool = True):
     conn = sql.connect("madness.db")
     cur = conn.cursor()
@@ -116,6 +152,9 @@ def build_predictions(execution_name: str):
             combined_result = np.subtract(team_a_stats, team_b_stats).reshape(1, -1)
             prediction = model.predict_proba(combined_result)[0]
             LOGGER.info(f"Team: {team_a} probability to beat team: {team_b}: {prediction}")
+
+            # Still a work in progress - comment out for now
+            # prediction = adjust_for_net_ranking(team_a, team_b, prediction)
 
             # Add result to DataFrame
             final_results = pd.concat(
