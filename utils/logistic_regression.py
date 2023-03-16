@@ -2,7 +2,8 @@ import logging
 import random
 import sqlite3 as sql
 
-import matplotlib.pyplot as plt
+from bracketeer import build_bracket
+import pandas as pd
 import numpy as np
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import classification_report, confusion_matrix
@@ -12,6 +13,10 @@ LOGGER = logging.getLogger()
 
 
 model = LogisticRegression(solver='liblinear', C=10.0, random_state=0)
+
+
+def get_db_conn():
+    return sql.connect("madness.db")
 
 
 def classify_data(training: bool = True):
@@ -74,10 +79,89 @@ def test_model(test_data: list):
     total = len(prob_result)
     correct = 0
     for i in range(len(prob_result)):
-        if prob_result[i][0] > .5:
+        if prob_result[i][1] > .5:
             correct += 1
 
     scoring_array = [1] * len(test_data)
     LOGGER.info(f"Raw Accuracy: {correct/total}")
     LOGGER.info(f"Score: {model.score(observations, scoring_array)}")
     LOGGER.info(f"Classification Report:\n{classification_report(scoring_array, model.predict(observations))}")
+
+
+def build_predictions(execution_name: str):
+
+    conn = get_db_conn()
+    cur = conn.cursor()
+    final_results = pd.DataFrame(columns=["team_id_x", "team_id_y", "prob_x", "prob_y"])
+
+    cur.execute("SELECT TeamID from team_men;")
+    team_ids = [team_id[0] for team_id in cur.fetchall()]
+    LOGGER.info(f"Running predictions for all matchups of teams: {team_ids}")
+
+    for team_a in team_ids:
+        for team_b in team_ids:
+            cur.execute(f"SELECT off_reb, def_reb, tsp, ftp, tovp FROM team_stats WHERE team_id='{team_a}';")
+            team_a_stats = np.array(cur.fetchone())
+            cur.execute(f"SELECT off_reb, def_reb, tsp, ftp, tovp FROM team_stats WHERE team_id='{team_b}';")
+            team_b_stats = np.array(cur.fetchone())
+
+            if not team_a_stats.any():
+                LOGGER.info(f"Team stats missing for: {team_a} - SKIPPING")
+                break
+            if not team_b_stats.any():
+                print(team_b_stats)
+                LOGGER.info(f"Team stats missing for: {team_b} - SKIPPING")
+                continue
+
+            combined_result = np.subtract(team_a_stats, team_b_stats).reshape(1, -1)
+            prediction = model.predict_proba(combined_result)[0]
+            LOGGER.info(f"Team: {team_a} probability to beat team: {team_b}: {prediction}")
+
+            # Add result to DataFrame
+            final_results = pd.concat(
+                [
+                    final_results,
+                    pd.DataFrame(
+                        {
+                            "team_id_x": [team_a],
+                            "team_id_y": [team_b],
+                            "prob_x": [prediction[1]],
+                            "prob_y": [prediction[0]]
+                        }
+                    )
+                ],
+                ignore_index=False
+            )
+    final_results.to_sql(f"predictions_{execution_name}", con=conn, if_exists="replace", index=False)
+    LOGGER.info(f"All results written to table: predictions_{execution_name}")
+
+
+def export_to_csv(execution_name: str):
+
+    file_name = "bracket_predictions_2023.csv"
+    LOGGER.info(f"Exporting matchup results to CSV: {file_name}")
+    query = f"select p.team_id_x, p.team_id_y, p.prob_x from predictions_{execution_name};"
+    LOGGER.info(f"Running query: {query} to build DataFrame")
+
+    output_base = pd.read_sql(f"select p.team_id_x, p.team_id_y, p.prob_x from predictions_{execution_name};", con=get_db_conn())
+    output_base["ID"] = "2023_" + output_base["team_id_x"].astype(str) + "_" + output_base["team_id_y"].astype(str)
+    output_base["Pred"] = output_base["prob_x"]
+    header = ["ID", "Pred"]
+    output_base.to_csv(file_name, columns=header, index=False)
+    LOGGER.info("Matchup results exported to CSV.")
+
+
+def build_bracketeer_bracket(execution_name: str):
+    """Create a PNG file of the bracket."""
+
+    LOGGER.info("Creating bracketeer bracket image!")
+    base_path = "march-machine-learning-mania-2023"
+    b = build_bracket(
+        outputPath=f"bracket_{execution_name}.png",
+        teamsPath=f"{base_path}/MTeams.csv",
+        seedsPath=f"{base_path}/MNCAATourneySeeds.csv",
+        submissionPath="bracket_predictions_2023.csv",
+        slotsPath=f"{base_path}/MNCAATourneySlots.csv",
+        year=2023
+    )
+    LOGGER.info(f"Bracket image created: bracket_{execution_name}.png")

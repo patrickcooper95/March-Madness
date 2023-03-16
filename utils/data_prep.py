@@ -220,3 +220,107 @@ def patch_null_values(table_set: set):
         cur.execute(f'UPDATE "{table}" SET LFTP=.5 WHERE LFTP IS NULL;')
         conn.commit()
     LOGGER.info(f"NULL fields patched for tables: {table_set}")
+
+
+def create_team_aggregate_table():
+
+    conn = get_db_conn()
+    cur = conn.cursor()
+    cur.execute("DROP TABLE IF EXISTS team_stats;")
+    cur.execute("""CREATE TABLE team_stats (
+                    team_id TEXT PRIMARY_KEY,
+                    fg_made REAL,
+                    fg_att REAL,
+                    fg_made_3 REAL,
+                    fg_att_3 REAL,
+                    ft_made REAL,
+                    ft_att REAL,
+                    off_reb REAL,
+                    def_reb REAL,
+                    ast REAL,
+                    "to" REAL,
+                    stl REAL,
+                    blk REAL,
+                    pf REAL,
+                    tsa REAL,
+                    tsp REAL,
+                    fgp REAL,
+                    "3ptp" REAL,
+                    ftp REAL,
+                    tovp REAL);
+                    """)
+    LOGGER.info("Created team aggregate stats table")
+    conn.commit()
+
+
+def build_team_aggregates(women=True):
+
+    conn = get_db_conn()
+    cur = conn.cursor()
+
+    sport = "women" if women else "men"
+
+    LOGGER.info(f"Building team aggregate stats for: {sport}")
+    cur.execute(f"SELECT TeamID FROM team_{sport};")
+    team_ids = [id[0] for id in cur.fetchall()]
+
+    create_team_aggregate_table()
+    for team_id in team_ids:
+        games_won = f"""SELECT WTeamID as team_id,
+                            WFGM as fg_made,
+                            WFGA as fg_att,
+                            WFGM3 as fg_made_3,
+                            WFGA3 as fg_att_3,
+                            WFTM as ft_made,
+                            WFTA as ft_att,
+                            WOR as off_reb,
+                            WDR as def_reb,
+                            WAst as ast,
+                            WTO as "to",
+                            WStl as stl,
+                            WBlk as blk,
+                            WPF as pf,
+                            WTSA as tsa,
+                            WTSP as tsp,
+                            WFGP as fgp,
+                            W3PTP as "3ptp",
+                            WFTP as ftp,
+                            WTOVP as tovp 
+                        FROM regular_season_detailed_results_{sport}
+                        WHERE WTeamID='{team_id}' and Season='2023';"""
+        games_lost = f"""SELECT LTeamID as team_id,
+                            LFGM as fg_made,
+                            LFGA as fg_att,
+                            LFGM3 as fg_made_3,
+                            LFGA3 as fg_att_3,
+                            LFTM as ft_made,
+                            LFTA as ft_att,
+                            LOR as off_reb,
+                            LDR as def_reb,
+                            LAst as ast,
+                            LTO as "to",
+                            LStl as stl,
+                            LBlk as blk,
+                            LPF as pf,
+                            LTSA as tsa,
+                            LTSP as tsp,
+                            LFGP as fgp,
+                            L3PTP as "3ptp",
+                            LFTP as ftp,
+                            LTOVP as tovp 
+                        FROM regular_season_detailed_results_{sport}
+                        WHERE LTeamID='{team_id}' and Season='2023';"""
+
+        LOGGER.info(f"Compiled game stats for team: {team_id}")
+
+        games_df = pd.concat([pd.read_sql(games_won, conn), pd.read_sql(games_lost, conn)])
+        avg_stats = games_df.mean()
+
+        avg_stats_df = avg_stats.to_frame().T
+        clean_avg_stats_df = avg_stats_df.dropna()
+        clean_avg_stats_df["team_id"] = clean_avg_stats_df["team_id"].astype(int).astype(str)
+        clean_avg_stats_df.to_sql("team_stats", con=conn, if_exists="append", index=False)
+
+
+if __name__ == "__main__":
+    build_team_aggregates(women=False)
