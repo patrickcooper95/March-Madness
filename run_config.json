@@ -1,0 +1,9 @@
+{
+  "sport": "women",
+  "execution_name": "V3",
+  "add_external_sources": false,
+  "run_data_setup": true,
+  "aggregate_team_data": true,
+  "transform_and_test": true,
+  "export_content": true
+}

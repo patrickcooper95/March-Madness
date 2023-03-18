@@ -124,11 +124,12 @@ def test_model(test_data: list):
     LOGGER.info(f"Classification Report:\n{classification_report(scoring_array, model.predict(observations))}")
 
 
-def build_predictions(execution_name: str):
+def build_predictions(execution_name: str, women: bool = True):
 
     conn = get_db_conn()
     cur = conn.cursor()
     final_results = pd.DataFrame(columns=["team_id_x", "team_id_y", "prob_x", "prob_y"])
+    sport = "W" if women else "M"
 
     cur.execute("SELECT TeamID from team_men;")
     team_ids = [team_id[0] for team_id in cur.fetchall()]
@@ -175,11 +176,12 @@ def build_predictions(execution_name: str):
     LOGGER.info(f"All results written to table: predictions_{execution_name}")
 
 
-def export_to_csv(execution_name: str):
+def export_to_csv(execution_name: str, women: bool = True):
 
-    file_name = "bracket_predictions_2023.csv"
+    sport = "W" if women else "M"
+    file_name = f"bracket_predictions_{sport}2023.csv"
     LOGGER.info(f"Exporting matchup results to CSV: {file_name}")
-    query = f"select team_id_x, team_id_y, prob_x from predictions_{execution_name};"
+    query = f"select team_id_x, team_id_y, prob_x from predictions_{sport}{execution_name};"
     LOGGER.info(f"Running query: {query} to build DataFrame")
 
     output_base = pd.read_sql(query, con=get_db_conn())
@@ -190,17 +192,18 @@ def export_to_csv(execution_name: str):
     LOGGER.info("Matchup results exported to CSV.")
 
 
-def build_bracketeer_bracket(execution_name: str):
+def build_bracketeer_bracket(execution_name: str, women: bool = True):
     """Create a PNG file of the bracket."""
 
+    sport = "W" if women else "M"
     LOGGER.info("Creating bracketeer bracket image!")
     base_path = "march-machine-learning-mania-2023"
     b = build_bracket(
         outputPath=f"bracket_{execution_name}.png",
-        teamsPath=f"{base_path}/MTeams.csv",
-        seedsPath=f"{base_path}/MNCAATourneySeeds.csv",
+        teamsPath=f"{base_path}/{sport}Teams.csv",
+        seedsPath=f"{base_path}/{sport}NCAATourneySeeds.csv",
         submissionPath="bracket_predictions_2023.csv",
-        slotsPath=f"{base_path}/MNCAATourneySlots.csv",
+        slotsPath=f"{base_path}/{sport}NCAATourneySlots.csv",
         year=2023
     )
-    LOGGER.info(f"Bracket image created: bracket_{execution_name}.png")
+    LOGGER.info(f"Bracket image created: bracket_{sport}_{execution_name}.png")
