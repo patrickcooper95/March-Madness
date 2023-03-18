@@ -15,14 +15,7 @@ with open("run_config.json", "r") as config_file:
 
 LOGGER.info(f"Loaded configs: {configs}")
 
-EXECUTION_NAME = "V3"
-add_external_sources = True
-run_data_setup = True
-aggregate_team_data = True
-transform_and_test = True
-export_content = True
-
-if run_data_setup:
+if configs["run_data_setup"]:
     # SETUP - only needs to be run once to create the database
     data_prep.create_database(configs["add_external_sources"])
 
@@ -30,27 +23,27 @@ if run_data_setup:
     data_prep.create_advanced_statistics()
 
     # Standardize team names for external data sources
-    if add_external_sources:
+    if configs["add_external_sources"]:
         data_prep.standardize_team_names()
 
-    if aggregate_team_data:
+    if configs["aggregate_team_data"]:
         data_prep.build_team_aggregates(sport=configs["sport"])
 
-if transform_and_test:
+if configs["transform_and_test"]:
     # Build regression training data
     data_transform.get_training_data(sport=configs["sport"])
     data_transform.get_test_data(sport=configs["sport"])
 
     # Classify training data
-    training_data = lr.classify_data(training=True)
+    training_data = lr.classify_data(training=True, sport=configs["sport"])
     # And test data
-    test_data = lr.classify_data(training=False)
+    test_data = lr.classify_data(training=False, sport=configs["sport"])
     lr.train_model(training_data)
     lr.test_model(test_data)
-    lr.build_predictions(configs["execution_name"])
+    lr.build_predictions(configs["execution_name"], sport=configs["sport"])
 
 
-if export_content:
+if configs["export_content"]:
     lr.export_to_csv(configs["execution_name"])
     lr.build_bracketeer_bracket(configs["execution_name"])
 

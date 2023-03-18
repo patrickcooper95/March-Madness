@@ -39,7 +39,7 @@ def create_transformation_table(sport: str, date_range: str, training: bool = Tr
     conn = get_db_conn()
     cur = conn.cursor()
 
-    table_name = "TRAINING_SET" if training else "TEST_SET"
+    table_name = f"{sport.upper()}_TRAINING_SET" if training else f"{sport}_TEST_SET"
     # Create table
     cur.execute(f"DROP TABLE IF EXISTS {table_name};")
     new_fields = """WFGM-LFGM as NFGM,

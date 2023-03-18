@@ -218,6 +218,8 @@ def patch_null_values(table_set: set):
         LOGGER.info(f"Patching null values for table: {table}")
         cur.execute(f'UPDATE "{table}" SET WFTP=.5 WHERE WFTP IS NULL;')
         cur.execute(f'UPDATE "{table}" SET LFTP=.5 WHERE LFTP IS NULL;')
+        cur.execute(f'UPDATE "{table}" SET W3PTP=0 WHERE W3PTP IS NULL;')
+        cur.execute(f'UPDATE "{table}" SET L3PTP=0 WHERE L3PTP IS NULL;')
         conn.commit()
     LOGGER.info(f"NULL fields patched for tables: {table_set}")
 

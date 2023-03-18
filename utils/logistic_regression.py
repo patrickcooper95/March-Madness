@@ -55,11 +55,11 @@ def adjust_for_net_ranking(team_a, team_b, predictions):
     return predictions
 
 
-def classify_data(training: bool = True):
+def classify_data(training: bool = True, sport: str = "men"):
     conn = sql.connect("madness.db")
     cur = conn.cursor()
 
-    table_name = "TRAINING_SET" if training else "TEST_SET"
+    table_name = f"{sport.upper()}_TRAINING_SET" if training else f"{sport.upper()}_TEST_SET"
     cur.execute(f"SELECT NOR, NDR, NTSP, N3PTP, NFTP, NTOVP FROM {table_name};")
     raw_data = cur.fetchall()
     conn.close()
@@ -70,7 +70,7 @@ def classify_data(training: bool = True):
     training_data = []
     for row in raw_data:
         # if it's a 1, stick with win-focused data
-        if table_name == "TRAINING_SET":
+        if table_name == f"{sport.upper()}_TRAINING_SET":
             if random.randint(0, 1):
                 training_data.append({1: [value for value in row]})
             else:
@@ -124,22 +124,21 @@ def test_model(test_data: list):
     LOGGER.info(f"Classification Report:\n{classification_report(scoring_array, model.predict(observations))}")
 
 
-def build_predictions(execution_name: str, women: bool = True):
+def build_predictions(execution_name: str, sport: str = "men"):
 
     conn = get_db_conn()
     cur = conn.cursor()
     final_results = pd.DataFrame(columns=["team_id_x", "team_id_y", "prob_x", "prob_y"])
-    sport = "W" if women else "M"
 
-    cur.execute("SELECT TeamID from team_men;")
+    cur.execute(f"SELECT TeamID from team_{sport};")
     team_ids = [team_id[0] for team_id in cur.fetchall()]
     LOGGER.info(f"Running predictions for all matchups of teams: {team_ids}")
 
     for team_a in team_ids:
         for team_b in team_ids:
-            cur.execute(f"SELECT off_reb, def_reb, tsp, \"3ptp\", ftp, tovp FROM team_stats WHERE team_id='{team_a}';")
+            cur.execute(f"SELECT off_reb, def_reb, tsp, \"3ptp\", ftp, tovp FROM {sport}_team_stats WHERE team_id='{team_a}';")
             team_a_stats = np.array(cur.fetchone())
-            cur.execute(f"SELECT off_reb, def_reb, tsp, \"3ptp\", ftp, tovp FROM team_stats WHERE team_id='{team_b}';")
+            cur.execute(f"SELECT off_reb, def_reb, tsp, \"3ptp\", ftp, tovp FROM {sport}_team_stats WHERE team_id='{team_b}';")
             team_b_stats = np.array(cur.fetchone())
 
             if not team_a_stats.any():
@@ -172,16 +171,16 @@ def build_predictions(execution_name: str, women: bool = True):
                 ],
                 ignore_index=False
             )
-    final_results.to_sql(f"predictions_{execution_name}", con=conn, if_exists="replace", index=False)
-    LOGGER.info(f"All results written to table: predictions_{execution_name}")
+    final_results.to_sql(f"predictions_{sport}_{execution_name}", con=conn, if_exists="replace", index=False)
+    LOGGER.info(f"All results written to table: predictions_{sport}_{execution_name}")
 
 
 def export_to_csv(execution_name: str, women: bool = True):
 
-    sport = "W" if women else "M"
+    sport = "women" if women else "men"
     file_name = f"bracket_predictions_{sport}2023.csv"
     LOGGER.info(f"Exporting matchup results to CSV: {file_name}")
-    query = f"select team_id_x, team_id_y, prob_x from predictions_{sport}{execution_name};"
+    query = f"select team_id_x, team_id_y, prob_x from predictions_{sport}_{execution_name};"
     LOGGER.info(f"Running query: {query} to build DataFrame")
 
     output_base = pd.read_sql(query, con=get_db_conn())
@@ -199,10 +198,10 @@ def build_bracketeer_bracket(execution_name: str, women: bool = True):
     LOGGER.info("Creating bracketeer bracket image!")
     base_path = "march-machine-learning-mania-2023"
     b = build_bracket(
-        outputPath=f"bracket_{execution_name}.png",
+        outputPath=f"bracket_{sport}_{execution_name}.png",
         teamsPath=f"{base_path}/{sport}Teams.csv",
         seedsPath=f"{base_path}/{sport}NCAATourneySeeds.csv",
-        submissionPath="bracket_predictions_2023.csv",
+        submissionPath=f"bracket_predictions_{'women' if women else 'men'}2023.csv",
         slotsPath=f"{base_path}/{sport}NCAATourneySlots.csv",
         year=2023
     )
