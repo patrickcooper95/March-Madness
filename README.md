@@ -14,13 +14,13 @@ The solution CSV files are compliant with Kaggle's
 challenge.
 
 <h3>Tools Used</h3>
-`sqlite`  
-`pandas`  
-`scikit-learn`  
-`bracketeer`  
+- `sqlite`  
+- `pandas`  
+- `scikit-learn`  
+- `bracketeer`  
 
 <h3>Running the Model</h3>
-First, install all Python requirements: `pip3 install -r requirements.txt`.
+First, install all Python requirements: `pip3 install -r requirements.txt` .
 Next, visit the Kaggle [March Machine Learning Mania](https://www.kaggle.com/competitions/march-machine-learning-mania-2023/overview)
 page to download the provided test/training data.
 
