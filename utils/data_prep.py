@@ -218,16 +218,18 @@ def patch_null_values(table_set: set):
         LOGGER.info(f"Patching null values for table: {table}")
         cur.execute(f'UPDATE "{table}" SET WFTP=.5 WHERE WFTP IS NULL;')
         cur.execute(f'UPDATE "{table}" SET LFTP=.5 WHERE LFTP IS NULL;')
+        cur.execute(f'UPDATE "{table}" SET W3PTP=0 WHERE W3PTP IS NULL;')
+        cur.execute(f'UPDATE "{table}" SET L3PTP=0 WHERE L3PTP IS NULL;')
         conn.commit()
     LOGGER.info(f"NULL fields patched for tables: {table_set}")
 
 
-def create_team_aggregate_table():
+def create_team_aggregate_table(sport: str = "men"):
 
     conn = get_db_conn()
     cur = conn.cursor()
-    cur.execute("DROP TABLE IF EXISTS team_stats;")
-    cur.execute("""CREATE TABLE team_stats (
+    cur.execute(f"DROP TABLE IF EXISTS {sport}_team_stats;")
+    cur.execute(f"""CREATE TABLE {sport}_team_stats (
                     team_id TEXT PRIMARY_KEY,
                     fg_made REAL,
                     fg_att REAL,
@@ -253,12 +255,10 @@ def create_team_aggregate_table():
     conn.commit()
 
 
-def build_team_aggregates(women=True):
+def build_team_aggregates(sport: str = "men"):
 
     conn = get_db_conn()
     cur = conn.cursor()
-
-    sport = "women" if women else "men"
 
     LOGGER.info(f"Building team aggregate stats for: {sport}")
     cur.execute(f"SELECT TeamID FROM team_{sport};")
@@ -319,8 +319,8 @@ def build_team_aggregates(women=True):
         avg_stats_df = avg_stats.to_frame().T
         clean_avg_stats_df = avg_stats_df.dropna()
         clean_avg_stats_df["team_id"] = clean_avg_stats_df["team_id"].astype(int).astype(str)
-        clean_avg_stats_df.to_sql("team_stats", con=conn, if_exists="append", index=False)
+        clean_avg_stats_df.to_sql(f"{sport}_team_stats", con=conn, if_exists="append", index=False)
 
 
 if __name__ == "__main__":
-    build_team_aggregates(women=False)
+    build_team_aggregates(sport="men")

@@ -39,7 +39,7 @@ def create_transformation_table(sport: str, date_range: str, training: bool = Tr
     conn = get_db_conn()
     cur = conn.cursor()
 
-    table_name = "TRAINING_SET" if training else "TEST_SET"
+    table_name = f"{sport.upper()}_TRAINING_SET" if training else f"{sport}_TEST_SET"
     # Create table
     cur.execute(f"DROP TABLE IF EXISTS {table_name};")
     new_fields = """WFGM-LFGM as NFGM,
@@ -71,10 +71,9 @@ def create_transformation_table(sport: str, date_range: str, training: bool = Tr
     conn.close()
 
 
-def get_test_data(women: bool = True):
+def get_test_data(sport: str = "men"):
     """Create test data set for model."""
 
-    sport = "women" if women else "men"
     date_range = create_years_list(2004, training=False, offset=True)
     LOGGER.info(f"Setting up test data for: {sport} and date_range: {date_range}")
 
@@ -82,21 +81,11 @@ def get_test_data(women: bool = True):
     create_transformation_table(sport, date_range, training=False)
 
 
-def get_training_data(women: bool = True):
+def get_training_data(sport: str = "men"):
     """Create training data set for model."""
 
-    sport = "women" if women else "men"
     date_range = create_years_list(2003, training=True)
     LOGGER.info(f"Setting up training data for: {sport} and date_range: {date_range}")
 
     # Create table
     create_transformation_table(sport, date_range, training=True)
-
-
-def consolidate_detailed_results(women: bool = True):
-    """Consolidate the Regular Season and Tourney Detailed Stats."""
-
-    table_suffix = "women" if women else "men"
-    LOGGER.info(f"Creating consolidated detailed results for {table_suffix}'s data")
-
-
