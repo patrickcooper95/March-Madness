@@ -6,7 +6,7 @@ and women's basketball teams, using logistic regression
 trained on historical game data.
 
 The results of the algorithm's output for each matchup are
-used to solve the both the men's and women's NCAA
+used to solve both the men's and women's NCAA
 tournament bracket.
 
 The solution CSV files are compliant with Kaggle's
@@ -14,10 +14,10 @@ The solution CSV files are compliant with Kaggle's
 challenge.
 
 <h3>Tools Used</h3>
-`sqlite`
-`pandas`
-`scikit-learn`
-`bracketeer`
+`sqlite`  
+`pandas`  
+`scikit-learn`  
+`bracketeer`  
 
 <h3>Running the Model</h3>
 First, install all Python requirements: `pip3 install -r requirements.txt`.
