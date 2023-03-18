@@ -15,11 +15,12 @@ LOGGER = logging.getLogger()
 model = LogisticRegression(solver='liblinear', C=5.0, random_state=0)
 
 
-def get_db_conn():
+def get_db_conn() -> sql.Connection:
     return sql.connect("madness.db")
 
 
-def adjust_for_net_ranking(team_a, team_b, predictions):
+def adjust_for_net_ranking(team_a: str, team_b: str, predictions: list) -> list:
+    """Adjust the model's predicted values by applying NET ranking."""
     conn = get_db_conn()
     cur = conn.cursor()
     LOGGER.info("Adjusting predictions based on NET rankings...")
@@ -40,12 +41,14 @@ def adjust_for_net_ranking(team_a, team_b, predictions):
 
     net_ranking_adj = net_ranking / net_constant
     if net_ranking_adj < 0:
+        # Skip net ranking adjustment if the adjustment would be 0 > x > 1
         if abs(net_ranking_adj) > (1 - predictions[1]):
             LOGGER.info("Not applying net ranking updates for this matchup.")
         else:
             predictions[0] = predictions[0] - net_ranking_adj
             predictions[1] = predictions[1] + net_ranking_adj
     elif net_ranking_adj > 0:
+        # Skip net ranking adjustment if the adjustment would be 0 > x > 1
         if abs(net_ranking_adj) > (predictions[1] - 0):
             LOGGER.info(f"Not applying net ranking updates for this matchup.")
         else:
@@ -55,7 +58,8 @@ def adjust_for_net_ranking(team_a, team_b, predictions):
     return predictions
 
 
-def classify_data(training: bool = True, sport: str = "men"):
+def classify_data(training: bool = True, sport: str = "men") -> list:
+    """Classify data as a win (1) or loss (0)."""
     conn = sql.connect("madness.db")
     cur = conn.cursor()
 
@@ -69,7 +73,7 @@ def classify_data(training: bool = True, sport: str = "men"):
 
     training_data = []
     for row in raw_data:
-        # if it's a 1, stick with win-focused data
+        # if it's a 1, stick with win-oriented data
         if table_name == f"{sport.upper()}_TRAINING_SET":
             if random.randint(0, 1):
                 training_data.append({1: [value for value in row]})
@@ -82,6 +86,7 @@ def classify_data(training: bool = True, sport: str = "men"):
 
 
 def train_model(training_data: list):
+    """Train model on specified training data."""
 
     LOGGER.info("--- Fitting model to training data ---")
 
@@ -102,7 +107,8 @@ def train_model(training_data: list):
 
 
 def test_model(test_data: list):
-    """Test trained model"""
+    """Test trained model."""
+
     LOGGER.info("--- Beginning test of trained model ---")
     LOGGER.info(f"{len(test_data)} observations to test")
 
@@ -125,6 +131,7 @@ def test_model(test_data: list):
 
 
 def build_predictions(execution_name: str, sport: str = "men"):
+    """Predict matchups using trained model."""
 
     conn = get_db_conn()
     cur = conn.cursor()
@@ -176,9 +183,10 @@ def build_predictions(execution_name: str, sport: str = "men"):
 
 
 def export_to_csv(execution_name: str, women: bool = True):
+    """Export the prediction results to CSV."""
 
     sport = "women" if women else "men"
-    file_name = f"bracket_predictions_{sport}2023.csv"
+    file_name = f"output/bracket_predictions_{sport}2023.csv"
     LOGGER.info(f"Exporting matchup results to CSV: {file_name}")
     query = f"select team_id_x, team_id_y, prob_x from predictions_{sport}_{execution_name};"
     LOGGER.info(f"Running query: {query} to build DataFrame")
@@ -198,10 +206,10 @@ def build_bracketeer_bracket(execution_name: str, women: bool = True):
     LOGGER.info("Creating bracketeer bracket image!")
     base_path = "march-machine-learning-mania-2023"
     b = build_bracket(
-        outputPath=f"bracket_{sport}_{execution_name}.png",
+        outputPath=f"output/bracket_{sport}_{execution_name}.png",
         teamsPath=f"{base_path}/{sport}Teams.csv",
         seedsPath=f"{base_path}/{sport}NCAATourneySeeds.csv",
-        submissionPath=f"bracket_predictions_{'women' if women else 'men'}2023.csv",
+        submissionPath=f"output/bracket_predictions_{'women' if women else 'men'}2023.csv",
         slotsPath=f"{base_path}/{sport}NCAATourneySlots.csv",
         year=2023
     )

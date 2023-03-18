@@ -10,7 +10,7 @@ import pandas as pd
 LOGGER = logging.getLogger()
 
 
-def get_db_conn():
+def get_db_conn() -> sql.Connection:
     return sql.connect("madness.db")
 
 
@@ -19,6 +19,8 @@ def create_years_list(
         training: bool,
         offset: bool = False,
         alternate: bool = False) -> str:
+    """Create a list of years specific to training/test period."""
+
     years = [start_year]
 
     if alternate:
@@ -35,6 +37,7 @@ def create_years_list(
 
 
 def create_transformation_table(sport: str, date_range: str, training: bool = True):
+    """Create transformation/analysis table for regression model."""
 
     conn = get_db_conn()
     cur = conn.cursor()
