@@ -66,4 +66,5 @@ by the model
 Once configured, run the model: `python3 main.py`
 
 <h3>Women's Bracket 2023 Using Bracketeer:</h3>
+
 ![](output/bracket_W_V1.png)
