@@ -15,8 +15,11 @@ challenge.
 
 <h3>Tools Used</h3>
 - `sqlite`  
+
 - `pandas`  
+
 - `scikit-learn`  
+
 - `bracketeer`  
 
 <h3>Running the Model</h3>
