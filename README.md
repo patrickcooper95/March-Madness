@@ -14,6 +14,7 @@ The solution CSV files are compliant with Kaggle's
 challenge.
 
 <h3>Tools Used</h3>
+
 - `sqlite`  
 
 - `pandas`  
