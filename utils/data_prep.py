@@ -11,7 +11,7 @@ LOGGER = logging.getLogger()
 
 name_exception_path = "external_sources/name_exceptions.csv"
 
-def get_db_conn():
+def get_db_conn() -> sql.Connection:
     return sql.connect("madness.db")
 
 
@@ -322,5 +322,6 @@ def build_team_aggregates(sport: str = "men"):
         clean_avg_stats_df.to_sql(f"{sport}_team_stats", con=conn, if_exists="append", index=False)
 
 
+# Provide the option to run this function only if these tables are missing
 if __name__ == "__main__":
     build_team_aggregates(sport="men")
