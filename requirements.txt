@@ -3,4 +3,3 @@ scikit-learn
 binarytree
 Pillow
 matplotlib
-bracketeer
