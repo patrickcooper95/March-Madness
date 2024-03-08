@@ -44,7 +44,7 @@ if configs["transform_and_test"]:
 
 
 if configs["export_content"]:
-    lr.export_to_csv(configs["execution_name"])
-    lr.build_bracketeer_bracket(configs["execution_name"])
+    lr.export_to_csv(configs["execution_name"], sport=configs["sport"])
+    lr.build_bracketeer_bracket(configs["execution_name"], sport=configs["sport"])
 
 LOGGER.info("Done.")

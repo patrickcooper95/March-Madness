@@ -182,10 +182,9 @@ def build_predictions(execution_name: str, sport: str = "men"):
     LOGGER.info(f"All results written to table: predictions_{sport}_{execution_name}")
 
 
-def export_to_csv(execution_name: str, women: bool = True):
+def export_to_csv(execution_name: str, sport: str = "women"):
     """Export the prediction results to CSV."""
 
-    sport = "women" if women else "men"
     file_name = f"output/bracket_predictions_{sport}2023.csv"
     LOGGER.info(f"Exporting matchup results to CSV: {file_name}")
     query = f"select team_id_x, team_id_y, prob_x from predictions_{sport}_{execution_name};"
@@ -199,18 +198,18 @@ def export_to_csv(execution_name: str, women: bool = True):
     LOGGER.info("Matchup results exported to CSV.")
 
 
-def build_bracketeer_bracket(execution_name: str, women: bool = True):
+def build_bracketeer_bracket(execution_name: str, sport: str = "women"):
     """Create a PNG file of the bracket."""
 
-    sport = "W" if women else "M"
+    sport_abbrev = "W" if sport == "women" else "M"
     LOGGER.info("Creating bracketeer bracket image!")
     base_path = "march-machine-learning-mania-2023"
     b = build_bracket(
-        outputPath=f"output/bracket_{sport}_{execution_name}.png",
-        teamsPath=f"{base_path}/{sport}Teams.csv",
-        seedsPath=f"{base_path}/{sport}NCAATourneySeeds.csv",
-        submissionPath=f"output/bracket_predictions_{'women' if women else 'men'}2023.csv",
-        slotsPath=f"{base_path}/{sport}NCAATourneySlots.csv",
+        outputPath=f"output/bracket_{sport_abbrev}_{execution_name}.png",
+        teamsPath=f"{base_path}/{sport_abbrev}Teams.csv",
+        seedsPath=f"{base_path}/{sport_abbrev}NCAATourneySeeds.csv",
+        submissionPath=f"output/bracket_predictions_{sport}_2023.csv",
+        slotsPath=f"{base_path}/{sport_abbrev}NCAATourneySlots.csv",
         year=2023
     )
-    LOGGER.info(f"Bracket image created: bracket_{sport}_{execution_name}.png")
+    LOGGER.info(f"Bracket image created: bracket_{sport_abbrev}_{execution_name}.png")

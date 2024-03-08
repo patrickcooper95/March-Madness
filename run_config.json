@@ -1,6 +1,6 @@
 {
-  "sport": "women",
-  "execution_name": "V1",
+  "sport": "men",
+  "execution_name": "2024_test",
   "add_external_sources": false,
   "run_data_setup": false,
   "aggregate_team_data": false,
