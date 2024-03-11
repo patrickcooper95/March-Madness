@@ -322,6 +322,10 @@ def build_team_aggregates(sport: str = "men"):
         clean_avg_stats_df.to_sql(f"{sport}_team_stats", con=conn, if_exists="append", index=False)
 
 
+def add_massey_ordinals(sport: str = "men"):
+    pass
+
+
 # Provide the option to run this function only if these tables are missing
 if __name__ == "__main__":
     build_team_aggregates(sport="men")
