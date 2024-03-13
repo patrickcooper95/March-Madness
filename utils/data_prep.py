@@ -12,7 +12,7 @@ LOGGER = logging.getLogger()
 name_exception_path = "external_sources/name_exceptions.csv"
 
 def get_db_conn() -> sql.Connection:
-    return sql.connect("madness.db")
+    return sql.connect("data/madness.db")
 
 
 def create_database(add_external_sources: bool = True):
@@ -328,55 +328,82 @@ def create_massey_ordinal_mapping():
     conn = get_db_conn()
     cur = conn.cursor()
 
-    # Create an index on the massey ordinal table first
-    create_index_statement_massey = """
-            CREATE INDEX IF NOT EXISTS massey_ordinals_mens_idx
-            ON massey_ordinal_men
-            (Season, RankingDayNum, SystemName, TeamID);
-    """
-    LOGGER.info(f"Creating massey ordinal index: {create_index_statement_massey}")
-    cur.execute(create_index_statement_massey)
-
-    # Create an index on the regular season compact table
-    create_index_statement_season = """
-            CREATE INDEX IF NOT EXISTS regular_season_compact_results men_idx
-            ON regular_season_compact_results_men
-            (Season, DayNum, WTeamID, LTeamID);
-    """
-    LOGGER.info(f"Creating regular season index: {create_index_statement_season}")
-    cur.execute(create_index_statement_season)
-
     # For each historical game, find the ranking
     games = cur.execute(
         """
-                SELECT Season, DayNum, WTeamID, LTeamID
+                SELECT RowID, Season, DayNum, WTeamID, LTeamID
                 FROM regular_season_compact_results_men
                 WHERE Season > 2002;
         """
     ).fetchall()
 
-
-
-def add_massey_ordinals(sport: str = "men"):
-
-    # Day of ranking is usually not the same as game day
-    # Use the nearest ranking after the game date
-    # e.g., Game on Day 37, using Ranking 39, not 32
-    conn = get_db_conn()
-    cur = conn.cursor()
-
-    LOGGER.info(f"Adding massey ordinals for: {sport}")
+    LOGGER.info("Creating massey ordinal matchup mapping table")
     cur.execute(
-        f"""
-            SELECT DayNum, Season, WTeamID, LTeamID
-            FROM regular_season_compact_results_{sport}
-            WHERE Season > 2002;
         """
-    )
-    team_ids = [id[0] for id in cur.fetchall()]
+            CREATE TABLE IF NOT EXISTS ordinal_mapping_men
+                (
+                    matchup_id INTEGER,
+                    ordinal_id INTEGER,
+                    system_name TEXT,
+                    accuracy INTEGER
+                );
+        """
+    ) # accuracy: Will be a 1 or 0 of whether it got the matchup correct
 
+    matchup_ordinals = []
+    for game in games:
+        matchup_row_id = game[0]
+        season = game[1]
+        day_num = game[2]
+        wteam_id = game[3]
+        lteam_id = game[4]
+
+        print(game)
+        while True:
+            winning_team_rankings = cur.execute(
+                f"""
+                    SELECT RowID, SystemName
+                    FROM massey_ordinal_men
+                    WHERE 
+                        Season={season} and
+                        TeamID={wteam_id} and
+                        RankingDayNum={day_num};
+                """
+            ).fetchall()
+            print(winning_team_rankings)
+            print(day_num)
+            if winning_team_rankings:
+                break
+            else:
+                day_num += 1
+
+        losing_team_rankings = cur.execute(
+            f"""
+                SELECT RowID, SystemName
+                FROM massey_ordinal_men
+                WHERE
+                    Season={season} and
+                    TeamID={lteam_id} and
+                    RankingDayNum={day_num};
+            """
+        ).fetchall()
+
+        rankings = []
+        for teams in [winning_team_rankings, losing_team_rankings]:
+            for rank in teams:
+                tmp_rank = list(rank)
+                tmp_rank.append(matchup_row_id)
+                rankings.append(tmp_rank)
+
+    cur.executemany(
+        f"""
+            INSERT INTO ordinal_mapping_men (ordinal_id, system_name, matchup_id)
+            VALUES (?, ?, ?);
+        """, rankings
+    )
 
 
 # Provide the option to run this function only if these tables are missing
 if __name__ == "__main__":
-    build_team_aggregates(sport="men")
+    # build_team_aggregates(sport="men")
+    create_massey_ordinal_mapping()
