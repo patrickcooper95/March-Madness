@@ -322,8 +322,59 @@ def build_team_aggregates(sport: str = "men"):
         clean_avg_stats_df.to_sql(f"{sport}_team_stats", con=conn, if_exists="append", index=False)
 
 
+def create_massey_ordinal_mapping():
+    """Create a table that maps a season day to a ranking."""
+
+    conn = get_db_conn()
+    cur = conn.cursor()
+
+    # Create an index on the massey ordinal table first
+    create_index_statement_massey = """
+            CREATE INDEX IF NOT EXISTS massey_ordinals_mens_idx
+            ON massey_ordinal_men
+            (Season, RankingDayNum, SystemName, TeamID);
+    """
+    LOGGER.info(f"Creating massey ordinal index: {create_index_statement_massey}")
+    cur.execute(create_index_statement_massey)
+
+    # Create an index on the regular season compact table
+    create_index_statement_season = """
+            CREATE INDEX IF NOT EXISTS regular_season_compact_results men_idx
+            ON regular_season_compact_results_men
+            (Season, DayNum, WTeamID, LTeamID);
+    """
+    LOGGER.info(f"Creating regular season index: {create_index_statement_season}")
+    cur.execute(create_index_statement_season)
+
+    # For each historical game, find the ranking
+    games = cur.execute(
+        """
+                SELECT Season, DayNum, WTeamID, LTeamID
+                FROM regular_season_compact_results_men
+                WHERE Season > 2002;
+        """
+    ).fetchall()
+
+
+
 def add_massey_ordinals(sport: str = "men"):
-    pass
+
+    # Day of ranking is usually not the same as game day
+    # Use the nearest ranking after the game date
+    # e.g., Game on Day 37, using Ranking 39, not 32
+    conn = get_db_conn()
+    cur = conn.cursor()
+
+    LOGGER.info(f"Adding massey ordinals for: {sport}")
+    cur.execute(
+        f"""
+            SELECT DayNum, Season, WTeamID, LTeamID
+            FROM regular_season_compact_results_{sport}
+            WHERE Season > 2002;
+        """
+    )
+    team_ids = [id[0] for id in cur.fetchall()]
+
 
 
 # Provide the option to run this function only if these tables are missing
