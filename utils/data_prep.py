@@ -3,7 +3,7 @@ import json
 import logging
 import os
 import sqlite3 as sql
-from math import isnan
+from sqlite3 import OperationalError
 
 import pandas as pd
 
@@ -326,6 +326,8 @@ def build_team_aggregates(sport: str = "men"):
 def create_massey_ordinal_mapping(ranking_system: str = "POM"):
     """Create a table that maps a season day to a ranking."""
 
+    dataframe_export = False
+
     conn = get_db_conn()
     cur = conn.cursor()
 
@@ -333,8 +335,7 @@ def create_massey_ordinal_mapping(ranking_system: str = "POM"):
     games = cur.execute(
         """
                 SELECT RowID, Season, DayNum, WTeamID, LTeamID
-                FROM regular_season_compact_results_men
-                WHERE Season > 2002;
+                FROM regular_season_detailed_results_men;
         """
     ).fetchall()
 
@@ -350,6 +351,7 @@ def create_massey_ordinal_mapping(ranking_system: str = "POM"):
     LOGGER.info(f"Retrieved all massey ordinals as dataframe: {rankings_df.head()}")
 
     matchup_ordinals = []
+    count = 0
     for game in games:
         matchup_row_id = game[0]
         season = game[1]
@@ -375,38 +377,59 @@ def create_massey_ordinal_mapping(ranking_system: str = "POM"):
         )
         LOGGER.info(f"Found {ranking_system} ranking for Winning Team: {wteam_id} and Losing Team: {lteam_id}")
 
-        accuracy = 0
-        print(rankings_df.iloc[[winning_team_index]]["OrdinalRank"])
         winning_team_ranking = rankings_df.iloc[[winning_team_index]]["OrdinalRank"].values[0]
         losing_team_ranking = rankings_df.iloc[[losing_team_index]]["OrdinalRank"].values[0]
         print(f"Winning Team ranking: {winning_team_ranking}")
         print(f"Losing Team ranking: {losing_team_ranking}")
-        if winning_team_ranking < losing_team_ranking:
-            LOGGER.info(f"Setting accuracy to 1 for matchup: {matchup_row_id}")
-            accuracy = 1
 
         LOGGER.info(f"Adding matchup {matchup_row_id} ranking mapping")
         print(f"Adding matchup {matchup_row_id} ranking mapping")
-        matchup_ordinals.append(
-            {
-                "matchup_id": matchup_row_id,
-                # add one because sqlite is index-1, pandas is index-0
-                "wteam_ranking_index": winning_team_index + 1,
-                "lteam_ranking_index": losing_team_index + 1,
-                "system_name": ranking_system,
-                "accuracy": accuracy
-            }
-        )
 
-    LOGGER.info("Writing massey ordinal mapping to table: ordinal_mapping_men")
-    # Convert list of dicts to DataFrame and then export to SQL
-    pd.DataFrame(matchup_ordinals).to_sql("ordinal_mapping_men", con=conn)
+        if dataframe_export:
+            matchup_ordinals.append(
+                {
+                    "matchup_row_id": matchup_row_id,
+                    "wteam_ranking": winning_team_ranking,
+                    "lteam_ranking": losing_team_ranking,
+                    "ranking_system": ranking_system,
+                }
+            )
+        else:
+            matchup_ordinals.append(
+                (
+                    winning_team_ranking,
+                    losing_team_ranking,
+                    matchup_row_id,
+                )
+            )
+        count += 1
+        if count > 10:
+            break
+
+    LOGGER.info("Writing massey ordinal mapping to table: regular_season_detailed_results_men")
+    check_or_add_rank_columns()
+
+    if dataframe_export:
+        # Convert list of dicts to DataFrame and then export to SQL
+        pd.DataFrame(matchup_ordinals).to_sql("ordinal_mapping_men", con=conn)
+    else:
+        # SQLite batch insert
+        for matchup in matchup_ordinals:
+            cur.execute(
+                f"""
+                    UPDATE regular_season_detailed_results_men
+                    SET WRANK={matchup[0]}, LRANK={matchup[1]} 
+                    WHERE rowid={matchup[2]};
+                """
+            )
+    conn.commit()
+    conn.close()
 
 
 def find_nearest_ranking_day(df, day_num):
     exact_match = df[df["RankingDayNum"] == day_num]
     if not exact_match.empty:
-        return exact_match.index
+        return exact_match.index.values[0]
     else:
         try:
             lower_neighbor = df[df["RankingDayNum"] < day_num]["RankingDayNum"].idxmax()
@@ -420,6 +443,26 @@ def find_nearest_ranking_day(df, day_num):
             upper_neighbor = None
 
         return lower_neighbor if lower_neighbor else upper_neighbor
+
+
+def check_or_add_rank_columns():
+    """Add the matchup ordinals to the regular season results table."""
+
+    conn = get_db_conn()
+    cur = conn.cursor()
+
+    alter_table_base = """
+        ALTER TABLE regular_season_detailed_results_men
+        ADD COLUMN {} INTEGER;
+    """
+    columns = ["WRANK", "LRANK"]
+    LOGGER.info(f"Adding {columns} if not exists")
+    for column in columns:
+        try:
+            cur.execute(alter_table_base.format(column))
+        except OperationalError:
+            LOGGER.info(f"Column {column} already exists.")
+    conn.close()
 
 
 # Provide the option to run this function only if these tables are missing
