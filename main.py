@@ -21,7 +21,7 @@ if configs["run_data_setup"]:
 
     # Add an index to the massey ordinal table
     if configs["sport"] == "men":
-        data_prep.create_massey_ordinal_mapping()
+        data_prep.create_massey_ordinal_mapping(ranking_system=configs["ranking_system"])
 
     # Add advanced stats to DB
     data_prep.create_advanced_statistics()
