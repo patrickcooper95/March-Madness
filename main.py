@@ -9,7 +9,6 @@ logging.basicConfig(level=logging.INFO,
                     datefmt='%H:%M:%S'
                     )
 
-
 with open("run_config.json", "r") as config_file:
     configs = json.load(config_file)
 
@@ -18,10 +17,6 @@ LOGGER.info(f"Loaded configs: {configs}")
 if configs["run_data_setup"]:
     # SETUP - only needs to be run once to create the database
     data_prep.create_database(configs["add_external_sources"])
-
-    # Add an index to the massey ordinal table
-    if configs["sport"] == "men":
-        data_prep.create_massey_ordinal_mapping(ranking_system=configs["ranking_system"])
 
     # Add advanced stats to DB
     data_prep.create_advanced_statistics()
@@ -32,6 +27,10 @@ if configs["run_data_setup"]:
 
     if configs["aggregate_team_data"]:
         data_prep.build_team_aggregates(sport=configs["sport"])
+
+    # Add an index to the massey ordinal table
+    if configs["sport"] == "men":
+        data_prep.create_massey_ordinal_mapping(ranking_system=configs["ranking_system"])
 
 if configs["transform_and_test"]:
     # Build regression training data

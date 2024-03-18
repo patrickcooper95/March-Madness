@@ -10,10 +10,14 @@ import pandas as pd
 
 LOGGER = logging.getLogger()
 
+with open("run_config.json", "r") as config_file:
+    configs = json.load(config_file)
+
 name_exception_path = "external_sources/name_exceptions.csv"
 
+
 def get_db_conn() -> sql.Connection:
-    return sql.connect("data/madness.db")
+    return sql.connect(configs["database_file"])
 
 
 def create_database(add_external_sources: bool = True):
@@ -49,8 +53,8 @@ def create_database(add_external_sources: bool = True):
         # "WTeamSpellings.csv": "team_spelling_women" -- Gives unicode decode error, probably not needed anyway
     }
 
-    conn = sql.connect("madness.db")
-    LOGGER.info("Connected to / created: madness.db")
+    conn = sql.connect(configs["database_file"])
+    LOGGER.info(f"Connected to / created: {configs['database_file']}")
 
     # Create database metadata table
     cur = conn.cursor()
@@ -327,6 +331,10 @@ def create_massey_ordinal_mapping(ranking_system: str = "POM"):
     """Create a table that maps a season day to a ranking."""
 
     dataframe_export = False
+    LOGGER.info(
+        f"Creating massey ordinal mapping using system: {ranking_system} "
+        + f"and a dataframe_export setting of: {dataframe_export}"
+    )
 
     conn = get_db_conn()
     cur = conn.cursor()
@@ -351,7 +359,6 @@ def create_massey_ordinal_mapping(ranking_system: str = "POM"):
     LOGGER.info(f"Retrieved all massey ordinals as dataframe: {rankings_df.head()}")
 
     matchup_ordinals = []
-    count = 0
     for game in games:
         matchup_row_id = game[0]
         season = game[1]
@@ -379,11 +386,8 @@ def create_massey_ordinal_mapping(ranking_system: str = "POM"):
 
         winning_team_ranking = rankings_df.iloc[[winning_team_index]]["OrdinalRank"].values[0]
         losing_team_ranking = rankings_df.iloc[[losing_team_index]]["OrdinalRank"].values[0]
-        print(f"Winning Team ranking: {winning_team_ranking}")
-        print(f"Losing Team ranking: {losing_team_ranking}")
 
         LOGGER.info(f"Adding matchup {matchup_row_id} ranking mapping")
-        print(f"Adding matchup {matchup_row_id} ranking mapping")
 
         if dataframe_export:
             matchup_ordinals.append(
@@ -402,9 +406,6 @@ def create_massey_ordinal_mapping(ranking_system: str = "POM"):
                     matchup_row_id,
                 )
             )
-        count += 1
-        if count > 10:
-            break
 
     LOGGER.info("Writing massey ordinal mapping to table: regular_season_detailed_results_men")
     check_or_add_rank_columns()

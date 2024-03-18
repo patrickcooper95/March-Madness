@@ -1,3 +1,4 @@
+import json
 import logging
 import random
 import sqlite3 as sql
@@ -11,12 +12,15 @@ from sklearn.metrics import classification_report, confusion_matrix
 
 LOGGER = logging.getLogger()
 
+with open("run_config.json", "r") as config_file:
+    configs = json.load(config_file)
+
 
 model = LogisticRegression(solver='liblinear', C=5.0, random_state=0)
 
 
 def get_db_conn() -> sql.Connection:
-    return sql.connect("madness.db")
+    return sql.connect(configs["database_file"])
 
 
 def adjust_for_net_ranking(team_a: str, team_b: str, predictions: list) -> list:
@@ -60,7 +64,7 @@ def adjust_for_net_ranking(team_a: str, team_b: str, predictions: list) -> list:
 
 def classify_data(training: bool = True, sport: str = "men") -> list:
     """Classify data as a win (1) or loss (0)."""
-    conn = sql.connect("madness.db")
+    conn = sql.connect(configs["database_file"])
     cur = conn.cursor()
 
     table_name = f"{sport.upper()}_TRAINING_SET" if training else f"{sport.upper()}_TEST_SET"

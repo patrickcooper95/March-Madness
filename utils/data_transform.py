@@ -9,9 +9,12 @@ import pandas as pd
 
 LOGGER = logging.getLogger()
 
+with open("run_config.json", "r") as config_file:
+    configs = json.load(config_file)
+
 
 def get_db_conn() -> sql.Connection:
-    return sql.connect("madness.db")
+    return sql.connect(configs["database_file"])
 
 
 def create_years_list(
@@ -61,6 +64,10 @@ def create_transformation_table(sport: str, date_range: str, training: bool = Tr
                         WFTP-LFTP as NFTP,
                         WTOVP-LTOVP as NTOVP
                         """
+    # only add the net ranking field if men's
+    if sport == "men":
+        new_fields += ", WRANK-LRANK as NRANK"
+
     create_statement = f"""CREATE TABLE {table_name} AS
                             SELECT {new_fields} FROM regular_season_detailed_results_{sport}
                             WHERE Season in ({date_range})

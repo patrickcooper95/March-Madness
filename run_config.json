@@ -2,9 +2,10 @@
   "sport": "men",
   "execution_name": "2024_test",
   "add_external_sources": false,
-  "run_data_setup": false,
+  "run_data_setup": true,
   "aggregate_team_data": false,
   "transform_and_test": false,
-  "export_content": true,
-  "ranking_system": "POM"
+  "export_content": false,
+  "ranking_system": "POM",
+  "database_file": "data/madness.db"
 }
