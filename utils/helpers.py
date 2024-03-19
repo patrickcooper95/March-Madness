@@ -9,7 +9,7 @@ LOGGER = getLogger()
 def run_workers(target_function, args_list):
     results = []
     with multiprocessing.Pool() as pool:
-        for result in pool.map(target_function, args_list):
+        for result in pool.starmap(target_function, args_list):
             results.append(result)
     return results
 

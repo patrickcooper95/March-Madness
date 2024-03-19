@@ -396,15 +396,19 @@ def create_massey_ordinal_mapping(ranking_system: str = "POM"):
     )
     LOGGER.info(f"Retrieved all massey ordinals as dataframe: {rankings_df.head()}")
 
-    worker_lists = helpers.create_chunks(games, 2)
+    worker_lists = helpers.create_chunks(games, 5)
     worker_lists = worker_lists[:10]
+    import time
 
+    start = time.time()
     # Prepare the arguments for worker function
     args_list = []
     for worker in worker_lists:
         args_list.append([worker, rankings_df])
 
     results = helpers.run_workers(helpers.matchup_ordinal_worker, args_list)
+    end = time.time()
+    print(f"Total time: {end-start}")
     print(results)
 
     LOGGER.info("Writing massey ordinal mapping to table: regular_season_detailed_results_men")
