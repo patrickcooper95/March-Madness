@@ -1,5 +1,6 @@
 import json
 import logging
+import sys
 
 from utils import data_prep, data_transform, logistic_regression as lr
 
@@ -11,6 +12,12 @@ logging.basicConfig(level=logging.INFO,
 
 with open("run_config.json", "r") as config_file:
     configs = json.load(config_file)
+
+if configs.get("ranking_system") and configs["sport"] == "women":
+    raise ValueError(
+        f"sport is women and ranking_system is a non-null value - " +
+        "ranking systems are not currently supported for this sport"
+    )
 
 LOGGER.info(f"Loaded configs: {configs}")
 
@@ -31,6 +38,7 @@ if configs["run_data_setup"]:
     # Add an index to the massey ordinal table
     if configs["sport"] == "men":
         data_prep.create_massey_ordinal_mapping(ranking_system=configs["ranking_system"])
+        data_prep.update_to_latest_ranking(sport="men")
 
 if configs["transform_and_test"]:
     # Build regression training data
@@ -43,7 +51,12 @@ if configs["transform_and_test"]:
     test_data = lr.classify_data(training=False, sport=configs["sport"])
     lr.train_model(training_data)
     lr.test_model(test_data)
-    lr.build_predictions(configs["execution_name"], sport=configs["sport"])
+
+    if configs.get("build_predictions"):
+        lr.build_predictions(configs["execution_name"], sport=configs["sport"])
+    else:
+        LOGGER.info("build_predictions set to false - model will stop at testing")
+        sys.exit(0)
 
 
 if configs["export_content"]:

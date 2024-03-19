@@ -34,12 +34,16 @@ def create_years_list(
             for i in range(15):
                 years.append(start_year + 1 * (i + 1))
         else:
-            years = [2019, 2020, 2021, 2022]
+            years = [2019, 2020, 2021, 2022,  2023]
 
     return ", ".join([f"'{str(year)}'" for year in years])
 
 
-def create_transformation_table(sport: str, date_range: str, training: bool = True):
+def create_transformation_table(
+        sport: str,
+        date_range: str,
+        include_tournament_data: bool = False,
+        training: bool = True):
     """Create transformation/analysis table for regression model."""
 
     conn = get_db_conn()
@@ -66,14 +70,30 @@ def create_transformation_table(sport: str, date_range: str, training: bool = Tr
                         """
     # only add the net ranking field if men's
     if sport == "men":
+        LOGGER.info(f"Sport is {sport}: Adding NRANK column")
         new_fields += ", WRANK-LRANK as NRANK"
 
-    create_statement = f"""CREATE TABLE {table_name} AS
-                            SELECT {new_fields} FROM regular_season_detailed_results_{sport}
-                            WHERE Season in ({date_range})
-                            UNION
-                            SELECT {new_fields} FROM tourney_detailed_results_{sport}
-                            WHERE Season in ({date_range});"""
+        create_statement = f"""CREATE TABLE {table_name} AS
+                                SELECT {new_fields} FROM regular_season_detailed_results_{sport}
+                                WHERE Season in ({date_range}) and NRANK is not null"""
+
+        if include_tournament_data:
+            LOGGER.info("Tournament data is being included in transformation table")
+            create_statement += f""" UNION SELECT {new_fields} FROM tourney_detailed_results_{sport}
+                    WHERE Season in ({date_range}) and NRANK is not null;"""
+        else:
+            LOGGER.info("Tournament data is SKIPPED for transformation table")
+            create_statement += ";"
+
+    if sport == "women":
+        LOGGER.info(f"Sport is {sport} - Not adding NRANK column")
+        create_statement = f"""CREATE TABLE {table_name} AS
+                                        SELECT {new_fields} FROM regular_season_detailed_results_{sport}
+                                        WHERE Season in ({date_range})
+                                        UNION
+                                        SELECT {new_fields} FROM tourney_detailed_results_{sport}
+                                        WHERE Season in ({date_range});"""
+
     LOGGER.info(f"Running statement: {create_statement}")
     cur.execute(create_statement)
     LOGGER.info(f"Successfully created {table_name} table")
