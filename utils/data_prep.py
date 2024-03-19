@@ -23,12 +23,17 @@ def get_db_conn() -> sql.Connection:
 def create_database(add_external_sources: bool = True):
     """Load data from CSVs to a SQLite Database."""
 
+    if configs["season"] == "2024":
+        massey_file_name = "MMasseyOrdinals_thruSeason2024_day128.csv"
+    else:
+        massey_file_name = "MMasseyOrdinals.csv"
+
     file_to_table_mapping = {
         "Cities.csv": "city",
         "Conferences.csv": "conference",
         "MConferenceTourneyGames.csv": "conference_tourney_games_men",
         "MGameCities.csv": "game_city_men",
-        "MMasseyOrdinals.csv": "massey_ordinal_men",
+        massey_file_name: "massey_ordinal_men",
         "MNCAATourneyCompactResults.csv": "tourney_compact_results_men",
         "MNCAATourneyDetailedResults.csv": "tourney_detailed_results_men",
         "MNCAATourneySeedRoundSlots.csv": "tourney_seed_round_slots_men",
@@ -64,7 +69,7 @@ def create_database(add_external_sources: bool = True):
     for file, table in file_to_table_mapping.items():
         LOGGER.info(f"Trying {file} -> {table}")
 
-        df = pd.read_csv(f"march-machine-learning-mania-2023/{file}")
+        df = pd.read_csv(f"march-machine-learning-mania-{configs['season']}/{file}")
         LOGGER.info(f"Created a DataFrame for: {file}")
 
         df.to_sql(table, conn, if_exists="replace", index=False)
@@ -292,7 +297,7 @@ def build_team_aggregates(sport: str = "men"):
                             WFTP as ftp,
                             WTOVP as tovp 
                         FROM regular_season_detailed_results_{sport}
-                        WHERE WTeamID='{team_id}' and Season='2023';"""
+                        WHERE WTeamID='{team_id}' and Season='{configs['season']}';"""
         games_lost = f"""SELECT LTeamID as team_id,
                             LFGM as fg_made,
                             LFGA as fg_att,
@@ -314,7 +319,7 @@ def build_team_aggregates(sport: str = "men"):
                             LFTP as ftp,
                             LTOVP as tovp 
                         FROM regular_season_detailed_results_{sport}
-                        WHERE LTeamID='{team_id}' and Season='2023';"""
+                        WHERE LTeamID='{team_id}' and Season='{configs['season']}';"""
 
         LOGGER.info(f"Compiled game stats for team: {team_id}")
 
@@ -325,6 +330,36 @@ def build_team_aggregates(sport: str = "men"):
         clean_avg_stats_df = avg_stats_df.dropna()
         clean_avg_stats_df["team_id"] = clean_avg_stats_df["team_id"].astype(int).astype(str)
         clean_avg_stats_df.to_sql(f"{sport}_team_stats", con=conn, if_exists="append", index=False)
+
+
+def update_to_latest_ranking(sport: str = "men"):
+    """Update the current season team aggregate with the latest ranking."""
+
+    conn = get_db_conn()
+    cur = conn.cursor()
+
+    team_table = f"{sport}_team_stats"
+
+    LOGGER.info("Updating teams to the latest ranking available")
+    teams = cur.execute(f"SELECT team_id FROM {team_table};").fetchall()
+    team_ranking = {}
+    for team in teams:
+        team_current_rank = cur.execute(
+            "SELECT MAX(RankingDayNum), OrdinalRank "
+            "FROM massey_ordinal_men "
+            f"WHERE TeamID={team[0]} and Season={configs['season']} and SystemName=\"{configs['ranking_system']}\";"
+        ).fetchone()[1]
+        team_ranking.update({team[0]: team_current_rank})
+
+    LOGGER.info("Retrieved latest rankings for all teams")
+    cur.execute(f"ALTER TABLE {team_table} ADD COLUMN rank INTEGER;")
+    LOGGER.info(f"Added `rank` column to {team_table}")
+
+    for team, rank in team_ranking.items():
+        LOGGER.info(f"Updating Team: {team} to rank: {rank}")
+        cur.execute(f"UPDATE {team_table} SET rank={rank} WHERE team_id={team};")
+    conn.commit()
+    LOGGER.info("All team ranks updated")
 
 
 def create_massey_ordinal_mapping(ranking_system: str = "POM"):
@@ -359,6 +394,7 @@ def create_massey_ordinal_mapping(ranking_system: str = "POM"):
     LOGGER.info(f"Retrieved all massey ordinals as dataframe: {rankings_df.head()}")
 
     matchup_ordinals = []
+    count = 0
     for game in games:
         matchup_row_id = game[0]
         season = game[1]
@@ -411,6 +447,9 @@ def create_massey_ordinal_mapping(ranking_system: str = "POM"):
                     matchup_row_id,
                 )
             )
+        count += 1
+        if count > 20:
+            break
 
     LOGGER.info("Writing massey ordinal mapping to table: regular_season_detailed_results_men")
     check_or_add_rank_columns()

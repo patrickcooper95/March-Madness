@@ -62,13 +62,30 @@ def adjust_for_net_ranking(team_a: str, team_b: str, predictions: list) -> list:
     return predictions
 
 
+def get_transformation_fields(context: str = "train"):
+
+    # These are the fields we are considering as statistically significant
+    master_field_list = [
+    ]
+    if context == "train":
+        if configs.get("ranking_system"):
+            return "NOR, NDR, NTSP, N3PTP, NFTP, NTOVP, NRANK"
+        else:
+            return "NOR, NDR, NTSP, N3PTP, NFTP, NTOVP"
+    if context == "predict":
+        return "off_reb, def_reb, tsp, \"3ptp\", ftp, tovp, rank"
+
+
 def classify_data(training: bool = True, sport: str = "men") -> list:
     """Classify data as a win (1) or loss (0)."""
     conn = sql.connect(configs["database_file"])
     cur = conn.cursor()
 
     table_name = f"{sport.upper()}_TRAINING_SET" if training else f"{sport.upper()}_TEST_SET"
-    cur.execute(f"SELECT NOR, NDR, NTSP, N3PTP, NFTP, NTOVP FROM {table_name};")
+    if configs.get("ranking_system"):
+        cur.execute(f"SELECT {get_transformation_fields()} FROM {table_name};")
+    else:
+        cur.execute(f"SELECT {get_transformation_fields()} FROM {table_name};")
     raw_data = cur.fetchall()
     conn.close()
     LOGGER.info(f"Retrieved {table_name} set (PREVIEW): {raw_data[:10]}")
@@ -147,9 +164,9 @@ def build_predictions(execution_name: str, sport: str = "men"):
 
     for team_a in team_ids:
         for team_b in team_ids:
-            cur.execute(f"SELECT off_reb, def_reb, tsp, \"3ptp\", ftp, tovp FROM {sport}_team_stats WHERE team_id='{team_a}';")
+            cur.execute(f"SELECT {get_transformation_fields(context='predict')} FROM {sport}_team_stats WHERE team_id='{team_a}';")
             team_a_stats = np.array(cur.fetchone())
-            cur.execute(f"SELECT off_reb, def_reb, tsp, \"3ptp\", ftp, tovp FROM {sport}_team_stats WHERE team_id='{team_b}';")
+            cur.execute(f"SELECT {get_transformation_fields(context='predict')} FROM {sport}_team_stats WHERE team_id='{team_b}';")
             team_b_stats = np.array(cur.fetchone())
 
             if not team_a_stats.any():
