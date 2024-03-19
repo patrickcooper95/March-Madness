@@ -23,22 +23,22 @@ LOGGER.info(f"Loaded configs: {configs}")
 
 if configs["run_data_setup"]:
     # SETUP - only needs to be run once to create the database
-    data_prep.create_database(configs["add_external_sources"])
-
-    # Add advanced stats to DB
-    data_prep.create_advanced_statistics()
-
-    # Standardize team names for external data sources
-    if configs["add_external_sources"]:
-        data_prep.standardize_team_names()
-
-    if configs["aggregate_team_data"]:
-        data_prep.build_team_aggregates(sport=configs["sport"])
+    # data_prep.create_database(configs["add_external_sources"])
+    #
+    # # Add advanced stats to DB
+    # data_prep.create_advanced_statistics()
+    #
+    # # Standardize team names for external data sources
+    # if configs["add_external_sources"]:
+    #     data_prep.standardize_team_names()
+    #
+    # if configs["aggregate_team_data"]:
+    #     data_prep.build_team_aggregates(sport=configs["sport"])
 
     # Add an index to the massey ordinal table
     if configs["sport"] == "men":
         data_prep.create_massey_ordinal_mapping(ranking_system=configs["ranking_system"])
-        data_prep.update_to_latest_ranking(sport="men")
+        # data_prep.update_to_latest_ranking(sport="men")
 
 if configs["transform_and_test"]:
     # Build regression training data
@@ -64,3 +64,6 @@ if configs["export_content"]:
     lr.build_bracketeer_bracket(configs["execution_name"], sport=configs["sport"])
 
 LOGGER.info("Done.")
+
+if __name__ == "__main__":
+    pass

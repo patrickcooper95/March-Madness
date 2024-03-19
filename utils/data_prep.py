@@ -1,11 +1,14 @@
 import csv
 import json
 import logging
+import multiprocessing
 import os
 import sqlite3 as sql
 from sqlite3 import OperationalError
 
 import pandas as pd
+
+import utils.helpers as helpers
 
 
 LOGGER = logging.getLogger()
@@ -393,77 +396,35 @@ def create_massey_ordinal_mapping(ranking_system: str = "POM"):
     )
     LOGGER.info(f"Retrieved all massey ordinals as dataframe: {rankings_df.head()}")
 
-    matchup_ordinals = []
-    count = 0
-    for game in games:
-        matchup_row_id = game[0]
-        season = game[1]
-        day_num = game[2]
-        wteam_id = game[3]
-        lteam_id = game[4]
+    worker_lists = helpers.create_chunks(games, 2)
+    worker_lists = worker_lists[:10]
 
-        winning_team_index = find_nearest_ranking_day(
-            rankings_df[
-                (rankings_df["TeamID"] == wteam_id) &
-                (rankings_df["Season"] == season) &
-                (rankings_df["SystemName"] == ranking_system)
-            ],
-            day_num
-        )
-        losing_team_index = find_nearest_ranking_day(
-            rankings_df[
-                (rankings_df["TeamID"] == lteam_id) &
-                (rankings_df["Season"] == season) &
-                (rankings_df["SystemName"] == ranking_system)
-                ],
-            day_num
-        )
-        LOGGER.info(f"Found {ranking_system} ranking for Winning Team: {wteam_id} and Losing Team: {lteam_id}")
+    # Prepare the arguments for worker function
+    args_list = []
+    for worker in worker_lists:
+        args_list.append([worker, rankings_df])
 
-        winning_team_ranking = rankings_df.iloc[[winning_team_index]]["OrdinalRank"].values[0]
-        losing_team_ranking = rankings_df.iloc[[losing_team_index]]["OrdinalRank"].values[0]
-
-        LOGGER.info(f"Adding matchup {matchup_row_id} ranking mapping")
-
-        if dataframe_export:
-            matchup_ordinals.append(
-                {
-                    "matchup_row_id": matchup_row_id,
-                    "wteam_ranking": winning_team_ranking,
-                    "lteam_ranking": losing_team_ranking,
-                    "ranking_system": ranking_system,
-                }
-            )
-        else:
-            matchup_ordinals.append(
-                (
-                    winning_team_ranking,
-                    losing_team_ranking,
-                    matchup_row_id,
-                )
-            )
-        count += 1
-        if count > 20:
-            break
+    results = helpers.run_workers(helpers.matchup_ordinal_worker, args_list)
+    print(results)
 
     LOGGER.info("Writing massey ordinal mapping to table: regular_season_detailed_results_men")
     check_or_add_rank_columns()
 
-    if dataframe_export:
-        # Convert list of dicts to DataFrame and then export to SQL
-        pd.DataFrame(matchup_ordinals).to_sql("ordinal_mapping_men", con=conn)
-    else:
-        # SQLite batch insert
-        for matchup in matchup_ordinals:
-            cur.execute(
-                f"""
-                    UPDATE regular_season_detailed_results_men
-                    SET WRANK={matchup[0]}, LRANK={matchup[1]} 
-                    WHERE rowid={matchup[2]};
-                """
-            )
-    conn.commit()
-    conn.close()
+    # if dataframe_export:
+    #     # Convert list of dicts to DataFrame and then export to SQL
+    #     pd.DataFrame(matchup_ordinals).to_sql("ordinal_mapping_men", con=conn)
+    # else:
+    #     # SQLite batch insert
+    #     for matchup in matchup_ordinals:
+    #         cur.execute(
+    #             f"""
+    #                 UPDATE regular_season_detailed_results_men
+    #                 SET WRANK={matchup[0]}, LRANK={matchup[1]}
+    #                 WHERE rowid={matchup[2]};
+    #             """
+    #         )
+    # conn.commit()
+    # conn.close()
 
 
 def find_nearest_ranking_day(df, day_num):
