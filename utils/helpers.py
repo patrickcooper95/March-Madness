@@ -60,8 +60,13 @@ def matchup_ordinal_worker(games, rankings_df, ranking_system: str = "POM"):
         )
         LOGGER.info(f"Found {ranking_system} ranking for Winning Team: {wteam_id} and Losing Team: {lteam_id}")
 
-        winning_team_ranking = rankings_df.iloc[[winning_team_index]]["OrdinalRank"].values[0]
-        losing_team_ranking = rankings_df.iloc[[losing_team_index]]["OrdinalRank"].values[0]
+        try:
+            winning_team_ranking = rankings_df.iloc[[winning_team_index]]["OrdinalRank"].values[0]
+            losing_team_ranking = rankings_df.iloc[[losing_team_index]]["OrdinalRank"].values[0]
+        except TypeError:
+            LOGGER.error(f"One of the following teams is missing ranking data for this matchup: {wteam_id} or {lteam_id}")
+            LOGGER.warning(f"Matchup: {matchup_row_id} will be ignored")
+            continue
 
         LOGGER.info(f"Adding matchup {matchup_row_id} ranking mapping")
         matchup_ordinals.append(

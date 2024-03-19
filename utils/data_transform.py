@@ -31,10 +31,10 @@ def create_years_list(
             years.append(start_year + 2 * (i + 1))
     else:
         if training:
-            for i in range(15):
+            for i in range(18):
                 years.append(start_year + 1 * (i + 1))
         else:
-            years = [2019, 2020, 2021, 2022,  2023]
+            years = [2022, 2023]
 
     return ", ".join([f"'{str(year)}'" for year in years])
 

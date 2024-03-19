@@ -1,6 +1,7 @@
 import json
 import logging
 import sys
+import time
 
 from utils import data_prep, data_transform, logistic_regression as lr
 
@@ -25,25 +26,33 @@ if __name__ == "__main__":
     LOGGER.info(f"Loaded configs: {configs}")
 
     if configs["run_data_setup"]:
+
+        setup_start_time = time.time()
+
         # SETUP - only needs to be run once to create the database
-        # data_prep.create_database(configs["add_external_sources"])
-        #
-        # # Add advanced stats to DB
-        # data_prep.create_advanced_statistics()
-        #
-        # # Standardize team names for external data sources
-        # if configs["add_external_sources"]:
-        #     data_prep.standardize_team_names()
-        #
-        # if configs["aggregate_team_data"]:
-        #     data_prep.build_team_aggregates(sport=configs["sport"])
-        #
-        # # Add an index to the massey ordinal table
+        data_prep.create_database(configs["add_external_sources"])
+
+        # Add advanced stats to DB
+        data_prep.create_advanced_statistics()
+
+        # Standardize team names for external data sources
+        if configs["add_external_sources"]:
+            data_prep.standardize_team_names()
+
+        if configs["aggregate_team_data"]:
+            data_prep.build_team_aggregates(sport=configs["sport"])
+
+        # Add an index to the massey ordinal table
         if configs["sport"] == "men":
             data_prep.create_massey_ordinal_mapping(ranking_system=configs["ranking_system"])
-            # data_prep.update_to_latest_ranking(sport="men")
+            data_prep.update_to_latest_ranking(sport="men")
+
+        LOGGER.info(f"data_setup run time: {time.time()-setup_start_time}")
 
     if configs["transform_and_test"]:
+
+        t_start_time = time.time()
+
         # Build regression training data
         data_transform.get_training_data(sport=configs["sport"])
         data_transform.get_test_data(sport=configs["sport"])
@@ -59,8 +68,10 @@ if __name__ == "__main__":
             lr.build_predictions(configs["execution_name"], sport=configs["sport"])
         else:
             LOGGER.info("build_predictions set to false - model will stop at testing")
+            LOGGER.info(f"transform_and_test run time: {time.time()-t_start_time}")
             sys.exit(0)
 
+        LOGGER.info(f"transform_and_test run time: {time.time() - t_start_time}")
 
     if configs["export_content"]:
         lr.export_to_csv(configs["execution_name"], sport=configs["sport"])
