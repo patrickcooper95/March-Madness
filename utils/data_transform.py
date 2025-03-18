@@ -34,7 +34,7 @@ def create_years_list(
             for i in range(18):
                 years.append(start_year + 1 * (i + 1))
         else:
-            years = [2022, 2023]
+            years = [2022, 2023, 2024]
 
     return ", ".join([f"'{str(year)}'" for year in years])
 

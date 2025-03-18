@@ -51,7 +51,7 @@ coefficient_modifiers = [
     {
         "key": "NRANK",
         "position": 6,
-        "modifier": .001
+        "modifier": -.005
     }
 ]
 
@@ -277,6 +277,6 @@ def build_bracketeer_bracket(execution_name: str, sport: str = "women"):
         seedsPath=f"{base_path}/{sport_abbrev}NCAATourneySeeds.csv",
         submissionPath=f"output/bracket_predictions_{sport}_{configs['season']}.csv",
         slotsPath=f"{base_path}/{sport_abbrev}NCAATourneySlots.csv",
-        year=2024
+        year=2025
     )
     LOGGER.info(f"Bracket image created: bracket_{sport_abbrev}_{execution_name}.png")

@@ -63,7 +63,7 @@ def matchup_ordinal_worker(games, rankings_df, ranking_system: str = "POM"):
         try:
             winning_team_ranking = rankings_df.iloc[[winning_team_index]]["OrdinalRank"].values[0]
             losing_team_ranking = rankings_df.iloc[[losing_team_index]]["OrdinalRank"].values[0]
-        except TypeError:
+        except (TypeError, ValueError):
             LOGGER.error(f"One of the following teams is missing ranking data for this matchup: {wteam_id} or {lteam_id}")
             LOGGER.warning(f"Matchup: {matchup_row_id} will be ignored")
             continue

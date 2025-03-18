@@ -401,20 +401,29 @@ def create_massey_ordinal_mapping(ranking_system: str = "POM"):
     )
     LOGGER.info(f"Retrieved all massey ordinals as dataframe: {rankings_df.head()}")
 
-    worker_lists = helpers.create_chunks(games, 1000)
+    if configs["use_multiprocessing"]:
+        logging.info("Starting massey ordinal mapping analysis (multiprocessing)")
+        logging.info(f"Using multiprocessing with chunk size of: {configs['multiprocessing_chunk_size']}")
+        worker_lists = helpers.create_chunks(games, configs["multiprocessing_chunk_size"])
 
-    start = time.time()
-    # Prepare the arguments for worker function
-    args_list = []
-    for worker in worker_lists:
-        args_list.append([worker, rankings_df])
+        start = time.time()
+        # Prepare the arguments for worker function
+        args_list = []
+        for worker in worker_lists:
+            args_list.append([worker, rankings_df])
 
-    results = helpers.run_workers(helpers.matchup_ordinal_worker, args_list)
-    end = time.time()
-    print(f"Total time: {end-start}")
-    matchup_ordinals = []
-    for result in results:
-        matchup_ordinals += result
+        results = helpers.run_workers(helpers.matchup_ordinal_worker, args_list)
+        end = time.time()
+        logging.info(f"Total time to add rankings (multiprocessing): {end-start}")
+        matchup_ordinals = []
+        for result in results:
+            matchup_ordinals += result
+    else:
+        logging.info("Starting massey ordinal mapping analysis (single-threaded)")
+        start = time.time()
+        matchup_ordinals = helpers.matchup_ordinal_worker(games, rankings_df)
+        end = time.time()
+        logging.info(f"Total time to add rankings (single-threaded): {end-start}")
 
     LOGGER.info("Writing massey ordinal mapping to table: regular_season_detailed_results_men")
     check_or_add_rank_columns()
