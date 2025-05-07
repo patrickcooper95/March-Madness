@@ -1,3 +1,4 @@
+import json
 import logging
 import random
 import sqlite3 as sql
@@ -11,12 +12,52 @@ from sklearn.metrics import classification_report, confusion_matrix
 
 LOGGER = logging.getLogger()
 
+with open("run_config.json", "r") as config_file:
+    configs = json.load(config_file)
 
-model = LogisticRegression(solver='liblinear', C=5.0, random_state=0)
+
+model = LogisticRegression(solver='liblinear', C=1.0, random_state=0)
+coefficient_modifiers = [
+    {
+        "key": "NOR",
+        "position": 0,
+        "modifier": 0
+    },
+    {
+        "key": "NDR",
+        "position": 1,
+        "modifier": 0
+    },
+    {
+        "key": "NTSP",
+        "position": 2,
+        "modifier": 0
+    },
+    {
+        "key": "N3PTP",
+        "position": 3,
+        "modifier": 0
+    },
+    {
+        "key": "NFTP",
+        "position": 4,
+        "modifier": 0
+    },
+    {
+        "key": "NTOVP",
+        "position": 5,
+        "modifier": 0
+    },
+    {
+        "key": "NRANK",
+        "position": 6,
+        "modifier": -.005
+    }
+]
 
 
 def get_db_conn() -> sql.Connection:
-    return sql.connect("madness.db")
+    return sql.connect(configs["database_file"])
 
 
 def adjust_for_net_ranking(team_a: str, team_b: str, predictions: list) -> list:
@@ -58,13 +99,30 @@ def adjust_for_net_ranking(team_a: str, team_b: str, predictions: list) -> list:
     return predictions
 
 
+def get_transformation_fields(context: str = "train"):
+
+    # These are the fields we are considering as statistically significant
+    master_field_list = [
+    ]
+    if context == "train":
+        if configs.get("ranking_system"):
+            return "NOR, NDR, NTSP, N3PTP, NFTP, NTOVP, NRANK"
+        else:
+            return "NOR, NDR, NTSP, N3PTP, NFTP, NTOVP"
+    if context == "predict":
+        return "off_reb, def_reb, tsp, \"3ptp\", ftp, tovp, rank"
+
+
 def classify_data(training: bool = True, sport: str = "men") -> list:
     """Classify data as a win (1) or loss (0)."""
-    conn = sql.connect("madness.db")
+    conn = sql.connect(configs["database_file"])
     cur = conn.cursor()
 
     table_name = f"{sport.upper()}_TRAINING_SET" if training else f"{sport.upper()}_TEST_SET"
-    cur.execute(f"SELECT NOR, NDR, NTSP, N3PTP, NFTP, NTOVP FROM {table_name};")
+    if configs.get("ranking_system"):
+        cur.execute(f"SELECT {get_transformation_fields()} FROM {table_name};")
+    else:
+        cur.execute(f"SELECT {get_transformation_fields()} FROM {table_name};")
     raw_data = cur.fetchall()
     conn.close()
     LOGGER.info(f"Retrieved {table_name} set (PREVIEW): {raw_data[:10]}")
@@ -96,6 +154,8 @@ def train_model(training_data: list):
         key = [ob for ob in obs][0]
         observations.append(key)
         result.append(obs[key])
+    LOGGER.info(f"Observations: {observations[:5]}")
+    LOGGER.info(f"Results: {result[:5]}")
     LOGGER.info(f"Data shaped for model training")
 
     LOGGER.info(f"Beginning logistic regression training for {len(training_data)} observations")
@@ -104,6 +164,13 @@ def train_model(training_data: list):
 
     LOGGER.info(f"Intercept: {model.intercept_}")
     LOGGER.info(f"Coefficients: {model.coef_}")
+
+    if configs["use_coefficient_modifiers"]:
+        LOGGER.info("Applying Coefficient modifiers")
+        for mod in coefficient_modifiers:
+            updated_value = model.coef_[0, mod["position"]] + mod["modifier"]
+            model.coef_[0, mod["position"]] = updated_value
+            LOGGER.info(f"{mod['key']} new coefficient value: {updated_value}")
 
 
 def test_model(test_data: list):
@@ -143,9 +210,9 @@ def build_predictions(execution_name: str, sport: str = "men"):
 
     for team_a in team_ids:
         for team_b in team_ids:
-            cur.execute(f"SELECT off_reb, def_reb, tsp, \"3ptp\", ftp, tovp FROM {sport}_team_stats WHERE team_id='{team_a}';")
+            cur.execute(f"SELECT {get_transformation_fields(context='predict')} FROM {sport}_team_stats WHERE team_id='{team_a}';")
             team_a_stats = np.array(cur.fetchone())
-            cur.execute(f"SELECT off_reb, def_reb, tsp, \"3ptp\", ftp, tovp FROM {sport}_team_stats WHERE team_id='{team_b}';")
+            cur.execute(f"SELECT {get_transformation_fields(context='predict')} FROM {sport}_team_stats WHERE team_id='{team_b}';")
             team_b_stats = np.array(cur.fetchone())
 
             if not team_a_stats.any():
@@ -182,35 +249,34 @@ def build_predictions(execution_name: str, sport: str = "men"):
     LOGGER.info(f"All results written to table: predictions_{sport}_{execution_name}")
 
 
-def export_to_csv(execution_name: str, women: bool = True):
+def export_to_csv(execution_name: str, sport: str = "women"):
     """Export the prediction results to CSV."""
 
-    sport = "women" if women else "men"
-    file_name = f"output/bracket_predictions_{sport}2023.csv"
+    file_name = f"output/bracket_predictions_{sport}_{configs['season']}.csv"
     LOGGER.info(f"Exporting matchup results to CSV: {file_name}")
     query = f"select team_id_x, team_id_y, prob_x from predictions_{sport}_{execution_name};"
     LOGGER.info(f"Running query: {query} to build DataFrame")
 
     output_base = pd.read_sql(query, con=get_db_conn())
-    output_base["ID"] = "2023_" + output_base["team_id_x"].astype(str) + "_" + output_base["team_id_y"].astype(str)
+    output_base["ID"] = f"{configs['season']}_" + output_base["team_id_x"].astype(str) + "_" + output_base["team_id_y"].astype(str)
     output_base["Pred"] = output_base["prob_x"]
     header = ["ID", "Pred"]
     output_base.to_csv(file_name, columns=header, index=False)
     LOGGER.info("Matchup results exported to CSV.")
 
 
-def build_bracketeer_bracket(execution_name: str, women: bool = True):
+def build_bracketeer_bracket(execution_name: str, sport: str = "women"):
     """Create a PNG file of the bracket."""
 
-    sport = "W" if women else "M"
+    sport_abbrev = "W" if sport == "women" else "M"
     LOGGER.info("Creating bracketeer bracket image!")
-    base_path = "march-machine-learning-mania-2023"
+    base_path = f"march-machine-learning-mania-{configs['season']}"
     b = build_bracket(
-        outputPath=f"output/bracket_{sport}_{execution_name}.png",
-        teamsPath=f"{base_path}/{sport}Teams.csv",
-        seedsPath=f"{base_path}/{sport}NCAATourneySeeds.csv",
-        submissionPath=f"output/bracket_predictions_{'women' if women else 'men'}2023.csv",
-        slotsPath=f"{base_path}/{sport}NCAATourneySlots.csv",
-        year=2023
+        outputPath=f"output/bracket_{sport_abbrev}_{execution_name}.png",
+        teamsPath=f"{base_path}/{sport_abbrev}Teams.csv",
+        seedsPath=f"{base_path}/{sport_abbrev}NCAATourneySeeds.csv",
+        submissionPath=f"output/bracket_predictions_{sport}_{configs['season']}.csv",
+        slotsPath=f"{base_path}/{sport_abbrev}NCAATourneySlots.csv",
+        year=2025
     )
-    LOGGER.info(f"Bracket image created: bracket_{sport}_{execution_name}.png")
+    LOGGER.info(f"Bracket image created: bracket_{sport_abbrev}_{execution_name}.png")

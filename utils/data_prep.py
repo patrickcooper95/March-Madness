@@ -1,29 +1,43 @@
 import csv
 import json
 import logging
+import multiprocessing
 import os
 import sqlite3 as sql
+import time
+from sqlite3 import OperationalError
 
 import pandas as pd
+
+import utils.helpers as helpers
 
 
 LOGGER = logging.getLogger()
 
+with open("run_config.json", "r") as config_file:
+    configs = json.load(config_file)
+
 name_exception_path = "external_sources/name_exceptions.csv"
 
+
 def get_db_conn() -> sql.Connection:
-    return sql.connect("madness.db")
+    return sql.connect(configs["database_file"])
 
 
 def create_database(add_external_sources: bool = True):
     """Load data from CSVs to a SQLite Database."""
+
+    if configs["season"] == "2024":
+        massey_file_name = "MMasseyOrdinals_thruSeason2024_day128.csv"
+    else:
+        massey_file_name = "MMasseyOrdinals.csv"
 
     file_to_table_mapping = {
         "Cities.csv": "city",
         "Conferences.csv": "conference",
         "MConferenceTourneyGames.csv": "conference_tourney_games_men",
         "MGameCities.csv": "game_city_men",
-        "MMasseyOrdinals.csv": "massey_ordinal_men",
+        massey_file_name: "massey_ordinal_men",
         "MNCAATourneyCompactResults.csv": "tourney_compact_results_men",
         "MNCAATourneyDetailedResults.csv": "tourney_detailed_results_men",
         "MNCAATourneySeedRoundSlots.csv": "tourney_seed_round_slots_men",
@@ -48,8 +62,8 @@ def create_database(add_external_sources: bool = True):
         # "WTeamSpellings.csv": "team_spelling_women" -- Gives unicode decode error, probably not needed anyway
     }
 
-    conn = sql.connect("madness.db")
-    LOGGER.info("Connected to / created: madness.db")
+    conn = sql.connect(configs["database_file"])
+    LOGGER.info(f"Connected to / created: {configs['database_file']}")
 
     # Create database metadata table
     cur = conn.cursor()
@@ -59,7 +73,7 @@ def create_database(add_external_sources: bool = True):
     for file, table in file_to_table_mapping.items():
         LOGGER.info(f"Trying {file} -> {table}")
 
-        df = pd.read_csv(f"march-machine-learning-mania-2023/{file}")
+        df = pd.read_csv(f"march-machine-learning-mania-{configs['season']}/{file}")
         LOGGER.info(f"Created a DataFrame for: {file}")
 
         df.to_sql(table, conn, if_exists="replace", index=False)
@@ -287,7 +301,7 @@ def build_team_aggregates(sport: str = "men"):
                             WFTP as ftp,
                             WTOVP as tovp 
                         FROM regular_season_detailed_results_{sport}
-                        WHERE WTeamID='{team_id}' and Season='2023';"""
+                        WHERE WTeamID='{team_id}' and Season='{configs['season']}';"""
         games_lost = f"""SELECT LTeamID as team_id,
                             LFGM as fg_made,
                             LFGA as fg_att,
@@ -309,7 +323,7 @@ def build_team_aggregates(sport: str = "men"):
                             LFTP as ftp,
                             LTOVP as tovp 
                         FROM regular_season_detailed_results_{sport}
-                        WHERE LTeamID='{team_id}' and Season='2023';"""
+                        WHERE LTeamID='{team_id}' and Season='{configs['season']}';"""
 
         LOGGER.info(f"Compiled game stats for team: {team_id}")
 
@@ -322,6 +336,155 @@ def build_team_aggregates(sport: str = "men"):
         clean_avg_stats_df.to_sql(f"{sport}_team_stats", con=conn, if_exists="append", index=False)
 
 
+def update_to_latest_ranking(sport: str = "men"):
+    """Update the current season team aggregate with the latest ranking."""
+
+    conn = get_db_conn()
+    cur = conn.cursor()
+
+    team_table = f"{sport}_team_stats"
+
+    LOGGER.info("Updating teams to the latest ranking available")
+    teams = cur.execute(f"SELECT team_id FROM {team_table};").fetchall()
+    team_ranking = {}
+    for team in teams:
+        team_current_rank = cur.execute(
+            "SELECT MAX(RankingDayNum), OrdinalRank "
+            "FROM massey_ordinal_men "
+            f"WHERE TeamID={team[0]} and Season={configs['season']} and SystemName=\"{configs['ranking_system']}\";"
+        ).fetchone()[1]
+        team_ranking.update({team[0]: team_current_rank})
+
+    LOGGER.info("Retrieved latest rankings for all teams")
+    try:
+        cur.execute(f"ALTER TABLE {team_table} ADD COLUMN rank INTEGER;")
+        LOGGER.info(f"Added `rank` column to {team_table}")
+    except OperationalError:
+        LOGGER.warning("Column rank already exists - skipping")
+
+    for team, rank in team_ranking.items():
+        LOGGER.info(f"Updating Team: {team} to rank: {rank}")
+        cur.execute(f"UPDATE {team_table} SET rank={rank} WHERE team_id={team};")
+    conn.commit()
+    LOGGER.info("All team ranks updated")
+
+
+def create_massey_ordinal_mapping(ranking_system: str = "POM"):
+    """Create a table that maps a season day to a ranking."""
+
+    dataframe_export = False
+    LOGGER.info(
+        f"Creating massey ordinal mapping using system: {ranking_system} "
+        + f"and a dataframe_export setting of: {dataframe_export}"
+    )
+
+    conn = get_db_conn()
+    cur = conn.cursor()
+
+    # For each historical game, find the ranking
+    games = cur.execute(
+        """
+                SELECT RowID, Season, DayNum, WTeamID, LTeamID
+                FROM regular_season_detailed_results_men;
+        """
+    ).fetchall()
+
+    LOGGER.info("Delete massey ordinal matchup mapping table if exists...")
+    cur.execute("DROP TABLE IF EXISTS ordinal_mapping_men;")
+    LOGGER.info("Dropped table: ordinal_mapping_men")
+
+    rankings_df = pd.read_sql_query(
+        """SELECT *
+        FROM massey_ordinal_men
+        WHERE SystemName="POM";""",
+        con=conn
+    )
+    LOGGER.info(f"Retrieved all massey ordinals as dataframe: {rankings_df.head()}")
+
+    if configs["use_multiprocessing"]:
+        logging.info("Starting massey ordinal mapping analysis (multiprocessing)")
+        logging.info(f"Using multiprocessing with chunk size of: {configs['multiprocessing_chunk_size']}")
+        worker_lists = helpers.create_chunks(games, configs["multiprocessing_chunk_size"])
+
+        start = time.time()
+        # Prepare the arguments for worker function
+        args_list = []
+        for worker in worker_lists:
+            args_list.append([worker, rankings_df])
+
+        results = helpers.run_workers(helpers.matchup_ordinal_worker, args_list)
+        end = time.time()
+        logging.info(f"Total time to add rankings (multiprocessing): {end-start}")
+        matchup_ordinals = []
+        for result in results:
+            matchup_ordinals += result
+    else:
+        logging.info("Starting massey ordinal mapping analysis (single-threaded)")
+        start = time.time()
+        matchup_ordinals = helpers.matchup_ordinal_worker(games, rankings_df)
+        end = time.time()
+        logging.info(f"Total time to add rankings (single-threaded): {end-start}")
+
+    LOGGER.info("Writing massey ordinal mapping to table: regular_season_detailed_results_men")
+    check_or_add_rank_columns()
+
+    if dataframe_export:
+        # Convert list of dicts to DataFrame and then export to SQL
+        pd.DataFrame(matchup_ordinals).to_sql("ordinal_mapping_men", con=conn)
+    else:
+        # SQLite batch insert
+        for matchup in matchup_ordinals:
+            cur.execute(
+                f"""
+                    UPDATE regular_season_detailed_results_men
+                    SET WRANK={matchup[0]}, LRANK={matchup[1]}
+                    WHERE rowid={matchup[2]};
+                """
+            )
+    conn.commit()
+    conn.close()
+
+
+def find_nearest_ranking_day(df, day_num):
+    exact_match = df[df["RankingDayNum"] == day_num]
+    if not exact_match.empty:
+        return exact_match.index.values[0]
+    else:
+        try:
+            lower_neighbor = df[df["RankingDayNum"] < day_num]["RankingDayNum"].idxmax()
+        except ValueError:
+            # if there is no ranking day less than day_num, set to None
+            lower_neighbor = None
+        try:
+            upper_neighbor = df[df["RankingDayNum"] > day_num]["RankingDayNum"].idxmin()
+        except ValueError:
+            # if there is no ranking day greater than day_num, set to None
+            upper_neighbor = None
+
+        return lower_neighbor if lower_neighbor else upper_neighbor
+
+
+def check_or_add_rank_columns():
+    """Add the matchup ordinals to the regular season results table."""
+
+    conn = get_db_conn()
+    cur = conn.cursor()
+
+    alter_table_base = """
+        ALTER TABLE regular_season_detailed_results_men
+        ADD COLUMN {} INTEGER;
+    """
+    columns = ["WRANK", "LRANK"]
+    LOGGER.info(f"Adding {columns} if not exists")
+    for column in columns:
+        try:
+            cur.execute(alter_table_base.format(column))
+        except OperationalError:
+            LOGGER.info(f"Column {column} already exists.")
+    conn.close()
+
+
 # Provide the option to run this function only if these tables are missing
 if __name__ == "__main__":
-    build_team_aggregates(sport="men")
+    # build_team_aggregates(sport="men")
+    create_massey_ordinal_mapping()
