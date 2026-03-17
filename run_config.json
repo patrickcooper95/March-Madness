@@ -1,16 +1,16 @@
 {
   "sport": "men",
-  "season": "2025",
-  "execution_name": "2025_men_v1",
+  "season": "2026",
+  "execution_name": "2026_men_v1",
   "add_external_sources": false,
   "run_data_setup": false,
   "aggregate_team_data": false,
-  "transform_and_test": true,
-  "build_predictions": true,
+  "transform_and_test": false,
+  "build_predictions": false,
   "export_content": true,
   "ranking_system": "POM",
   "database_file": "data/madness.db",
-  "use_coefficient_modifiers": true,
+  "use_coefficient_modifiers": false,
   "use_multiprocessing": true,
   "multiprocessing_chunk_size": 1000
 }
